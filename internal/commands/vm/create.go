@@ -67,10 +67,14 @@ func newCreateCommandVM(cfg *commonConfig) *cobra.Command {
 				return fmt.Errorf("creating firecracker vm provider: %w", err)
 			}
 			fsSvc := afero.NewOsFs()
-			stateSvc := filesystem.NewStateService(input.Name, cfg.StateRootPath, fsSvc)
+			stateSvc, nil := filesystem.NewStateService(input.Name, cfg.StateRootPath, fsSvc)
+			if err != nil {
+				return fmt.Errorf("creating state service: %w", err)
+			}
 
+			owner := fmt.Sprintf("vm-%s", input.Name)
 			a := app.New(imageSvc, vmSvc, stateSvc, fsSvc)
-			vm, err := a.CreateVM(cmd.Context(), input.Name, spec)
+			vm, err := a.CreateVM(cmd.Context(), input.Name, owner, spec)
 			if err != nil {
 				return fmt.Errorf("failed creating vm: %w", err)
 			}
