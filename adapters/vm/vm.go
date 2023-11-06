@@ -2,7 +2,7 @@ package vm
 
 import (
 	"github.com/mikrolite/mikrolite/adapters/vm/firecracker"
-	"github.com/mikrolite/mikrolite/ports"
+	"github.com/mikrolite/mikrolite/core/ports"
 )
 
 func New(name string) (ports.VMProvider, error) {

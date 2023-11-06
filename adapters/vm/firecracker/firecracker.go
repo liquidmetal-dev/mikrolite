@@ -3,7 +3,7 @@ package firecracker
 import (
 	"context"
 
-	"github.com/mikrolite/mikrolite/domain"
+	"github.com/mikrolite/mikrolite/core/domain"
 )
 
 const (
