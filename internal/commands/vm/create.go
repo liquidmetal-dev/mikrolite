@@ -16,13 +16,13 @@ import (
 
 func newCreateCommandVM(cfg *commonConfig) *cobra.Command {
 	input := struct {
-		Name                      string
-		VCPU                      int
-		MemoryInMb                int
-		RootVolumeImage           string
-		KernelVolumeImage         string
-		KernelVolumeImageFilename string
-		KernelHostPath            string
+		Name              string
+		VCPU              int
+		MemoryInMb        int
+		RootVolumeImage   string
+		KernelVolumeImage string
+		KernelFilename    string
+		KernelHostPath    string
 	}{}
 
 	cmd := &cobra.Command{
@@ -34,7 +34,9 @@ func newCreateCommandVM(cfg *commonConfig) *cobra.Command {
 				VCPU:       input.VCPU,
 				MemoryInMb: input.MemoryInMb,
 				Kernel: domain.Kernel{
-					Source: domain.KernelSource{},
+					Source: domain.KernelSource{
+						Filename: input.KernelFilename,
+					},
 				},
 				RootVolume: domain.Volume{
 					Name: "root",
@@ -47,8 +49,7 @@ func newCreateCommandVM(cfg *commonConfig) *cobra.Command {
 			}
 			if input.KernelVolumeImage != "" {
 				spec.Kernel.Source.Container = &domain.ContainerKernelSource{
-					Image:    input.KernelVolumeImage,
-					Filename: input.KernelVolumeImageFilename,
+					Image: input.KernelVolumeImage,
 				}
 			}
 			if input.KernelHostPath != "" {
@@ -57,6 +58,7 @@ func newCreateCommandVM(cfg *commonConfig) *cobra.Command {
 				}
 			}
 
+			//TODO: move this to dependency injection
 			client, err := ctr.New(cfg.SocketPath)
 			if err != nil {
 				return fmt.Errorf("creating containerd client: %w", err)
@@ -89,8 +91,8 @@ func newCreateCommandVM(cfg *commonConfig) *cobra.Command {
 	cmd.Flags().IntVarP(&input.MemoryInMb, "memory", "m", 2048, "The amount of memory for the vm")
 	cmd.Flags().StringVar(&input.RootVolumeImage, "root-image", "", "The container to use for the root volume")
 	cmd.Flags().StringVar(&input.KernelVolumeImage, "kernel-image", "", "The container to use for the kernel")
-	cmd.Flags().StringVar(&input.KernelVolumeImageFilename, "kernel-image-filename", "vmlinux", "The name of the kernel file in the image")
 	cmd.Flags().StringVar(&input.KernelHostPath, "kernel-path", "", "The path to a kernel file on the host")
+	cmd.Flags().StringVar(&input.KernelFilename, "kernel-filename", "vmlinux", "The name of the kernel file in the image or in the hostpath")
 
 	cmd.MarkFlagRequired("name")
 	cmd.MarkFlagRequired("root-image")

@@ -33,6 +33,9 @@ type VMSpec struct {
 type VMStatus struct {
 	// VolumeMounts holds details of where the volumes are mounted.
 	VolumeMounts map[string]Mount `json:"volume_mounts"`
+
+	// KernelMount holds the mount details for the kernel.
+	KernelMount *Mount `json:"kernel_mount,omitempty"`
 }
 
 // Kernel defines the kernel to use.
@@ -73,6 +76,8 @@ type RawVolumeSource struct {
 
 // KernelSource is the source of the kernel.
 type KernelSource struct {
+	// Filename is the name of the kernel file in the image or in the hostpath
+	Filename string `json:"filename"`
 	// Container specifies the kernel comes from a container image.
 	Container *ContainerKernelSource `json:"container,omitempty"`
 	// HostPath specified the kernel comes from a file already on the host system
@@ -83,8 +88,6 @@ type KernelSource struct {
 type ContainerKernelSource struct {
 	// Image is the container images that holds the kernel.
 	Image string `json:"image"`
-	// Filename is the name of the kernel image file within the container image.
-	Filename string `json:"filename"`
 }
 
 // HostPathKernelSource is teh specification of using a file on the host for the kernel.
