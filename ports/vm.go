@@ -7,7 +7,7 @@ import (
 )
 
 // VMProvider represents a vmm implementation.
-type VMrovider interface {
+type VMProvider interface {
 	// Create will create a new vm.
 	Create(ctx context.Context, spec *domain.VMSpec) (string, error)
 	// Stop will stop a running vm.
