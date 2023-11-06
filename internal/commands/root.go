@@ -1,6 +1,9 @@
 package commands
 
-import "github.com/spf13/cobra"
+import (
+	"github.com/mikrolite/mikrolite/internal/commands/vm"
+	"github.com/spf13/cobra"
+)
 
 func NewRoot() *cobra.Command {
 	cmd := &cobra.Command{
@@ -11,7 +14,7 @@ func NewRoot() *cobra.Command {
 		},
 	}
 
-	//TODO: add subcommands
+	cmd.AddCommand(vm.NewVMCommand())
 
 	return cmd
 }
