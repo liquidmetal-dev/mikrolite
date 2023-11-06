@@ -8,12 +8,13 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/mikrolite/mikrolite/adapters/containerd"
+	"github.com/mikrolite/mikrolite/adapters/filesystem"
 	"github.com/mikrolite/mikrolite/adapters/vm"
 	"github.com/mikrolite/mikrolite/core/app"
 	"github.com/mikrolite/mikrolite/core/domain"
 )
 
-func newCreateCommandVM(socketPath *string) *cobra.Command {
+func newCreateCommandVM(cfg *commonConfig) *cobra.Command {
 	input := struct {
 		Name                      string
 		VCPU                      int
@@ -56,7 +57,7 @@ func newCreateCommandVM(socketPath *string) *cobra.Command {
 				}
 			}
 
-			client, err := ctr.New(*socketPath)
+			client, err := ctr.New(cfg.SocketPath)
 			if err != nil {
 				return fmt.Errorf("creating containerd client: %w", err)
 			}
@@ -66,8 +67,9 @@ func newCreateCommandVM(socketPath *string) *cobra.Command {
 				return fmt.Errorf("creating firecracker vm provider: %w", err)
 			}
 			fsSvc := afero.NewOsFs()
+			stateSvc := filesystem.NewStateService(input.Name, cfg.StateRootPath, fsSvc)
 
-			a := app.New(imageSvc, vmSvc, fsSvc)
+			a := app.New(imageSvc, vmSvc, stateSvc, fsSvc)
 			vm, err := a.CreateVM(cmd.Context(), input.Name, spec)
 			if err != nil {
 				return fmt.Errorf("failed creating vm: %w", err)
