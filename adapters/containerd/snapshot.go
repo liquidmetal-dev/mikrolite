@@ -53,7 +53,7 @@ func (s *imageService) snapshotImage(ctx context.Context, owner string, image co
 		}, nil
 	case "devmapper":
 		return &domain.Mount{
-			Type:     domain.MountTypeFilesystemPath,
+			Type:     domain.MountTypeBlockDevice,
 			Location: mounts[0].Source,
 		}, nil
 	default:

@@ -18,11 +18,16 @@ const (
 	dataFilePerm = 0o644
 )
 
-func NewStateService(vmName string, rootStateDir string, fs afero.Fs) ports.StateService {
+func NewStateService(vmName string, rootStateDir string, fs afero.Fs) (ports.StateService, error) {
+	stateDir := filepath.Join(rootStateDir, vmName)
+	if err := fs.MkdirAll(stateDir, dataFilePerm); err != nil {
+		return nil, fmt.Errorf("creating state directory %s: %w", stateDir, err)
+	}
+
 	return &stateService{
 		fs:       fs,
-		stateDir: filepath.Join(rootStateDir, vmName),
-	}
+		stateDir: stateDir,
+	}, nil
 }
 
 type stateService struct {
