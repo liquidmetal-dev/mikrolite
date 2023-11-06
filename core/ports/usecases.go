@@ -9,7 +9,7 @@ import (
 // VMUseCases defines the uses cases related to interacting with vms
 type VMUseCases interface {
 	// CreateVM is the use case for creating a new VM.
-	CreateVM(ctx context.Context, vm *domain.VM) (*domain.VM, error)
+	CreateVM(ctx context.Context, name string, vm *domain.VMSpec) (*domain.VM, error)
 	// RemoveVM is the use case for removing a VM.
 	RemoveVM(ctx context.Context, name string) error
 	// GetVM is the use case for getting details of a VM.
