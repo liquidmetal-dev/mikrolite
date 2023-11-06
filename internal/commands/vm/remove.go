@@ -2,7 +2,7 @@ package vm
 
 import "github.com/spf13/cobra"
 
-func newRemoveVMCommand(socketPath *string) *cobra.Command {
+func newRemoveVMCommand(cfh *commonConfig) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "remove",
 		Short: "Remove a vm",
