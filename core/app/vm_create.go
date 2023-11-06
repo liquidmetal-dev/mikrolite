@@ -10,38 +10,50 @@ import (
 	"github.com/mikrolite/mikrolite/core/ports"
 )
 
-func (a *app) CreateVM(ctx context.Context, name string, owner string, vm *domain.VMSpec) (*domain.VM, error) {
+func (a *app) CreateVM(ctx context.Context, name string, owner string, vmSpec *domain.VMSpec) (*domain.VM, error) {
 	slog.Debug("Creating vm")
 
 	if name == "" {
 		return nil, ErrNameRequired
 	}
 
-	if vm == nil {
+	if vmSpec == nil {
 		return nil, ErrVmSpecRequired
 	}
 
 	//TODO: add validation
 
-	storedVM, err := a.stateService.GetVM()
+	vm, err := a.stateService.GetVM()
 	if err != nil {
 		return nil, fmt.Errorf("getting vm state: %w", err)
 	}
-	if storedVM != nil {
+	if vm != nil {
 		return nil, fmt.Errorf("vm %s already exists", name)
 	}
 
-	kernelMount, err := a.handleKernel(ctx, owner, &vm.Kernel)
+	vm.Spec = *vmSpec
+	vm.Status = &domain.VMStatus{
+		VolumeMounts: map[string]domain.Mount{},
+	}
+
+	kernelMount, err := a.handleKernel(ctx, owner, &vm.Spec.Kernel)
 	if err != nil {
 		return nil, fmt.Errorf("handling kernel: %w", err)
 	}
-	fmt.Println(kernelMount)
+	vm.Status.KernelMount = kernelMount
 
-	rootVolumeMount, err := a.handleVolume(ctx, owner, &vm.RootVolume)
+	rootVolumeMount, err := a.handleVolume(ctx, owner, &vm.Spec.RootVolume)
 	if err != nil {
 		return nil, fmt.Errorf("handling root volume: %w", err)
 	}
-	fmt.Println(rootVolumeMount)
+	vm.Status.VolumeMounts[vmSpec.RootVolume.Name] = *rootVolumeMount
+
+	_, err = a.vmService.Create(ctx, &vm.Spec)
+	if err != nil {
+		return nil, fmt.Errorf("creating vm: %w", err)
+	}
+
+	//TODO: add start if the provider supports start
 
 	return nil, nil
 }
