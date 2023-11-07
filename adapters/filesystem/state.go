@@ -145,6 +145,10 @@ func (s *stateService) SavePID(pid int) error {
 	return nil
 }
 
+func (s *stateService) Root() string {
+	return s.stateDir
+}
+
 func (s *stateService) pidFileName() string {
 	return fmt.Sprintf("%s/vm.pid", s.stateDir)
 }

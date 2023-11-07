@@ -3,6 +3,8 @@ package ports
 import "github.com/mikrolite/mikrolite/core/domain"
 
 type StateService interface {
+	Root() string
+
 	GetVM() (*domain.VM, error)
 	SaveVM(vm *domain.VM) error
 
