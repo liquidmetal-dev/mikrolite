@@ -59,6 +59,7 @@ func (f *Provider) Create(ctx context.Context, vm *domain.VM) (string, error) {
 
 	cfg := sdk.Config{
 		VMID:            vm.Name,
+		NetNS:           vm.Status.NetworkNamespace,
 		SocketPath:      socketPath,
 		KernelImagePath: kernelPath,
 		KernelArgs:      formatKernelCmdLine(kernelArgs),

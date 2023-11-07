@@ -36,6 +36,9 @@ type VMStatus struct {
 
 	// KernelMount holds the mount details for the kernel.
 	KernelMount *Mount `json:"kernel_mount,omitempty"`
+
+	// NetworkNamespace is the netns for this vm
+	NetworkNamespace string
 }
 
 // Kernel defines the kernel to use.
