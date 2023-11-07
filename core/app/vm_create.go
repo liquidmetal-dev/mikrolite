@@ -36,6 +36,7 @@ func (a *app) CreateVM(ctx context.Context, name string, owner string, vmSpec *d
 	vm.Status = &domain.VMStatus{
 		VolumeMounts: map[string]domain.Mount{},
 	}
+	vm.Status.NetworkNamespace = fmt.Sprintf("/var/run/netns/mikrolite-%s", name)
 
 	kernelMount, err := a.handleKernel(ctx, owner, &vm.Spec.Kernel)
 	if err != nil {
