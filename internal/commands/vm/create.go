@@ -59,19 +59,19 @@ func newCreateCommandVM(cfg *commonConfig) *cobra.Command {
 			}
 
 			//TODO: move this to dependency injection
+			fsSvc := afero.NewOsFs()
+			stateSvc, err := filesystem.NewStateService(input.Name, cfg.StateRootPath, fsSvc)
+			if err != nil {
+				return fmt.Errorf("creating state service: %w", err)
+			}
 			client, err := ctr.New(cfg.SocketPath)
 			if err != nil {
 				return fmt.Errorf("creating containerd client: %w", err)
 			}
 			imageSvc := containerd.NewImageService(client)
-			vmSvc, err := vm.New("firecracker")
+			vmSvc, err := vm.New("firecracker", stateSvc, fsSvc)
 			if err != nil {
 				return fmt.Errorf("creating firecracker vm provider: %w", err)
-			}
-			fsSvc := afero.NewOsFs()
-			stateSvc, nil := filesystem.NewStateService(input.Name, cfg.StateRootPath, fsSvc)
-			if err != nil {
-				return fmt.Errorf("creating state service: %w", err)
 			}
 
 			owner := fmt.Sprintf("vm-%s", input.Name)

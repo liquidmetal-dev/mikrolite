@@ -31,6 +31,7 @@ func (a *app) CreateVM(ctx context.Context, name string, owner string, vmSpec *d
 		return nil, fmt.Errorf("vm %s already exists", name)
 	}
 
+	vm = &domain.VM{}
 	vm.Spec = *vmSpec
 	vm.Status = &domain.VMStatus{
 		VolumeMounts: map[string]domain.Mount{},
@@ -48,7 +49,7 @@ func (a *app) CreateVM(ctx context.Context, name string, owner string, vmSpec *d
 	}
 	vm.Status.VolumeMounts[vmSpec.RootVolume.Name] = *rootVolumeMount
 
-	_, err = a.vmService.Create(ctx, &vm.Spec)
+	_, err = a.vmService.Create(ctx, vm)
 	if err != nil {
 		return nil, fmt.Errorf("creating vm: %w", err)
 	}
