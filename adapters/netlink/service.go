@@ -41,7 +41,7 @@ func deleteLink(name string, linkType string) error {
 
 func linkExists(name string, linkType string) (bool, error) {
 	if _, err := netlink.LinkByName(name); err != nil {
-		if errors.Is(err, netlink.LinkNotFoundError{}) {
+		if errors.As(err, &netlink.LinkNotFoundError{}) {
 			slog.Debug("network link doesn't exist", "name", name, "type", linkType)
 
 			return false, nil

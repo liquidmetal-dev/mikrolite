@@ -2,12 +2,17 @@ package app
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"log/slog"
 
+	"github.com/firecracker-microvm/firecracker-go-sdk"
+	"github.com/mikrolite/mikrolite/cloudinit"
 	"github.com/mikrolite/mikrolite/core/domain"
 	"github.com/mikrolite/mikrolite/core/ports"
+	"github.com/yitsushi/macpot"
+	"gopkg.in/yaml.v2"
 )
 
 func (a *app) CreateVM(ctx context.Context, name string, owner string, vmSpec *domain.VMSpec) (*domain.VM, error) {
@@ -23,7 +28,7 @@ func (a *app) CreateVM(ctx context.Context, name string, owner string, vmSpec *d
 
 	//TODO: add validation
 
-	vm, err := a.stateService.GetVM()
+	vm, err := a.stateService.GetVM() //TODO: handle the state better
 	if err != nil {
 		return nil, fmt.Errorf("getting vm state: %w", err)
 	}
@@ -31,24 +36,29 @@ func (a *app) CreateVM(ctx context.Context, name string, owner string, vmSpec *d
 		return nil, fmt.Errorf("vm %s already exists", name)
 	}
 
-	vm = &domain.VM{}
+	vm = &domain.VM{
+		Name: name,
+	}
 	vm.Spec = *vmSpec
 	vm.Status = &domain.VMStatus{
 		VolumeMounts: map[string]domain.Mount{},
 	}
 	vm.Status.NetworkNamespace = fmt.Sprintf("/var/run/netns/mikrolite-%s", name)
-
-	kernelMount, err := a.handleKernel(ctx, owner, &vm.Spec.Kernel)
-	if err != nil {
-		return nil, fmt.Errorf("handling kernel: %w", err)
+	if vm.Spec.Kernel.CmdLine == nil {
+		vm.Spec.Kernel.CmdLine = defaultKernelCmdLine()
 	}
-	vm.Status.KernelMount = kernelMount
 
-	rootVolumeMount, err := a.handleVolume(ctx, owner, &vm.Spec.RootVolume)
-	if err != nil {
-		return nil, fmt.Errorf("handling root volume: %w", err)
+	handlers := []handler{
+		a.handleKernel,
+		a.handleVolumes,
+		a.handleNetwork,
 	}
-	vm.Status.VolumeMounts[vmSpec.RootVolume.Name] = *rootVolumeMount
+
+	for _, h := range handlers {
+		if err := h(ctx, owner, vm); err != nil {
+			return nil, err
+		}
+	}
 
 	_, err = a.vmService.Create(ctx, vm)
 	if err != nil {
@@ -60,23 +70,55 @@ func (a *app) CreateVM(ctx context.Context, name string, owner string, vmSpec *d
 	return nil, nil
 }
 
-func (a *app) handleKernel(ctx context.Context, owner string, kernel *domain.Kernel) (*domain.Mount, error) {
+func (a *app) handleKernel(ctx context.Context, owner string, vm *domain.VM) error {
+	kernel := vm.Spec.Kernel
 	if kernel.Source.HostPath != nil {
-		return &domain.Mount{
+		vm.Status.KernelMount = &domain.Mount{
 			Type:     domain.MountTypeFilesystemPath,
 			Location: kernel.Source.HostPath.Path,
-		}, nil
+		}
+
+		return nil
 	}
 
 	if kernel.Source.Container != nil {
-		return a.imageService.PullAndMount(ctx, ports.PullAndMountInput{
+		mount, err := a.imageService.PullAndMount(ctx, ports.PullAndMountInput{
 			ImageName: kernel.Source.Container.Image,
 			Owner:     owner,
 			UsedFor:   ports.ImageUsedForKernel,
 		})
+		if err != nil {
+			return fmt.Errorf("getting kernel image: %w", err)
+		}
+
+		vm.Status.KernelMount = mount
+
+		return nil
 	}
 
-	return nil, errors.New("unexpected")
+	return errors.New("unexpected")
+}
+
+func (a *app) handleVolumes(ctx context.Context, owner string, vm *domain.VM) error {
+	slog.Info("Setting up volumes")
+
+	slog.Debug("Setting up root volumes")
+	rootVolumeMount, err := a.handleVolume(ctx, owner, &vm.Spec.RootVolume)
+	if err != nil {
+		return fmt.Errorf("handling root volume: %w", err)
+	}
+	vm.Status.VolumeMounts[vm.Spec.RootVolume.Name] = *rootVolumeMount
+
+	slog.Debug("Setting up additional volumes")
+	for _, vol := range vm.Spec.AdditionalVolumes {
+		volMount, err := a.handleVolume(ctx, owner, &vol)
+		if err != nil {
+			return fmt.Errorf("handling volume %s: %s", vol.Name, err)
+		}
+		vm.Status.VolumeMounts[vol.Name] = *volMount
+	}
+
+	return nil
 }
 
 func (a *app) handleVolume(ctx context.Context, owner string, volume *domain.Volume) (*domain.Mount, error) {
@@ -96,4 +138,98 @@ func (a *app) handleVolume(ctx context.Context, owner string, volume *domain.Vol
 	}
 
 	return nil, errors.New("unexpected")
+}
+
+func (a *app) handleNetwork(ctx context.Context, owner string, vm *domain.VM) error {
+	slog.Info("Setting up network")
+
+	mac, err := macpot.New(macpot.AsLocal(), macpot.AsUnicast())
+	if err != nil {
+		return fmt.Errorf("creating mac address vm: %w", err)
+	}
+
+	bridgeExists, err := a.networkService.BridgeExists(vm.Spec.NetworkConfig.BridgeName)
+	if err != nil {
+		return fmt.Errorf("checking if bridge exists")
+	}
+	if !bridgeExists {
+		if createErr := a.networkService.BridgeCreate(vm.Spec.NetworkConfig.BridgeName); createErr != nil {
+			return fmt.Errorf("creating bridge %s: %w", vm.Spec.NetworkConfig.BridgeName, err)
+		}
+	}
+
+	ifaceName, err := a.networkService.NewInterfaceName()
+	if err != nil {
+		return fmt.Errorf("getting vm network interface name: %s", err)
+	}
+
+	if createErr := a.networkService.InterfaceCreate(ifaceName, mac.ToString()); createErr != nil {
+		return fmt.Errorf("creating vm network interface %s: %w", ifaceName, createErr)
+	}
+
+	if attachErr := a.networkService.AttachToBridge(ifaceName, vm.Spec.NetworkConfig.BridgeName); attachErr != nil {
+		return fmt.Errorf("attching vm interface to bridge: %w", attachErr)
+	}
+
+	vm.Status.NetworkStatus = &domain.NetworkStatus{
+		HostDeviveName:  ifaceName,
+		GuestDeviceName: "eth0",
+		GuestMAC:        mac.ToString(),
+	}
+
+	//vm.Spec.Kernel.CmdLine["ds"] = "nocloud-net;s=http://169.254.169.254/latest/"
+	vm.Spec.Kernel.CmdLine["ds"] = "nocloud-net"
+	networkConfig, err := generateNetworkConfig(vm)
+	if err != nil {
+		return fmt.Errorf("generating network config")
+	}
+	slog.Debug("created cloud-init networkconfig", "config", networkConfig)
+	vm.Spec.Kernel.CmdLine["network-config"] = networkConfig
+
+	return nil
+}
+
+func generateNetworkConfig(vm *domain.VM) (string, error) {
+	netConf := &cloudinit.Network{
+		Version:  2,
+		Ethernet: map[string]cloudinit.Ethernet{},
+	}
+
+	eth := &cloudinit.Ethernet{
+		Match:          cloudinit.Match{},
+		DHCP4:          firecracker.Bool(true),
+		DHCP6:          firecracker.Bool(true),
+		DHCPIdentifier: firecracker.String(cloudinit.DhcpIdentifierMac),
+	}
+
+	macAddress := vm.Status.NetworkStatus.GuestMAC
+	if macAddress != "" {
+		eth.Match.MACAddress = macAddress
+	} else {
+		eth.Match.Name = vm.Status.NetworkStatus.GuestDeviceName
+	}
+
+	//TODO: handle static ip
+
+	netConf.Ethernet[vm.Status.NetworkStatus.GuestDeviceName] = *eth
+
+	nd, err := yaml.Marshal(netConf)
+	if err != nil {
+		return "", fmt.Errorf("marshalling network data: %w", err)
+	}
+
+	return base64.StdEncoding.EncodeToString(nd), nil
+}
+
+func defaultKernelCmdLine() map[string]string {
+	return map[string]string{
+		"console":       "ttyS0",
+		"reboot":        "k",
+		"panic":         "1",
+		"pci":           "off",
+		"i8042.noaux":   "",
+		"i8042.nomux":   "",
+		"i8042.nopnp":   "",
+		"i8042.dumbkbd": "",
+	}
 }

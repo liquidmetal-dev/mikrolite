@@ -38,7 +38,6 @@ type Provider struct {
 func (f *Provider) Create(ctx context.Context, vm *domain.VM) (string, error) {
 	socketPath := f.socketPath()
 	kernelPath := filepath.Join(vm.Status.KernelMount.Location, vm.Spec.Kernel.Source.Filename)
-	kernelArgs := defaultKernelCmdLine()
 	networkCfgPath := fmt.Sprintf("%s/fcnet.conflist", f.ss.Root())
 
 	if err := f.ensureLogPath(); err != nil {
@@ -58,11 +57,11 @@ func (f *Provider) Create(ctx context.Context, vm *domain.VM) (string, error) {
 	f.writeNetworkConfig(networkCfgPath, "fcnet")
 
 	cfg := sdk.Config{
-		VMID:            vm.Name,
-		NetNS:           vm.Status.NetworkNamespace,
+		VMID: vm.Name,
+		//NetNS:           vm.Status.NetworkNamespace,
 		SocketPath:      socketPath,
 		KernelImagePath: kernelPath,
-		KernelArgs:      formatKernelCmdLine(kernelArgs),
+		KernelArgs:      formatKernelCmdLine(vm.Spec.Kernel.CmdLine),
 		MachineCfg: models.MachineConfiguration{
 			VcpuCount:  intTo64Ptr(vm.Spec.VCPU),
 			MemSizeMib: intTo64Ptr(vm.Spec.MemoryInMb),
@@ -84,18 +83,28 @@ func (f *Provider) Create(ctx context.Context, vm *domain.VM) (string, error) {
 		cfg.Drives = append(cfg.Drives, drive)
 	}
 
-	cfg.NetworkInterfaces = sdk.NetworkInterfaces{
-		{
-			CNIConfiguration: &sdk.CNIConfiguration{
-				NetworkName: "fcnet",
-				IfName:      "veth0",
-				ConfDir:     f.ss.Root(),              //TODO: cni conf dir
-				BinPath:     []string{"/opt/cni/bin"}, //TODO: path to cni bins
-				VMIfName:    "eth0",
-			},
-			AllowMMDS: true,
+	// cfg.NetworkInterfaces = sdk.NetworkInterfaces{
+	// 	{
+	// 		CNIConfiguration: &sdk.CNIConfiguration{
+	// 			NetworkName: "fcnet",
+	// 			IfName:      "veth0",
+	// 			ConfDir:     f.ss.Root(),              //TODO: cni conf dir
+	// 			BinPath:     []string{"/opt/cni/bin"}, //TODO: path to cni bins
+	// 			VMIfName:    "eth0",
+	// 		},
+	// 		AllowMMDS: true,
+	// 	},
+	// }
+	netInt := sdk.NetworkInterface{
+		StaticConfiguration: &sdk.StaticNetworkConfiguration{
+			MacAddress:  vm.Status.NetworkStatus.GuestMAC,
+			HostDevName: vm.Status.NetworkStatus.HostDeviveName,
 		},
+		AllowMMDS: true,
 	}
+
+	cfg.NetworkInterfaces = sdk.NetworkInterfaces{netInt}
+
 	cfg.MmdsVersion = sdk.MMDSv1
 
 	//TODO: this needs to be an optional arg for the path
@@ -138,9 +147,7 @@ func (f *Provider) Create(ctx context.Context, vm *domain.VM) (string, error) {
 
 	// END -------
 
-	vmIP := m.Cfg.NetworkInterfaces[0].StaticConfiguration.IPConfiguration.IPAddr.IP.String()
-
-	return vmIP, nil
+	return "", nil
 }
 
 // Stop will stop a running vm.
@@ -198,20 +205,4 @@ func formatKernelCmdLine(args map[string]string) string {
 	}
 
 	return strings.Join(output, " ")
-}
-
-func defaultKernelCmdLine() map[string]string {
-	return map[string]string{
-		"console": "ttyS0",
-		"reboot":  "k",
-		"panic":   "1",
-		//"pci":           "off",
-		"i8042.noaux":   "",
-		"i8042.nomux":   "",
-		"i8042.nopnp":   "",
-		"i8042.dumbkbd": "",
-		//"ds":            "nocloud-net;s=http://169.254.169.254/latest/",
-	}
-	//NOTE: the cloud-init data source is commented out for the time being as we
-	// may not want to use cloud-init. Maybe easier to just SSH into the VMs and execute commands
 }

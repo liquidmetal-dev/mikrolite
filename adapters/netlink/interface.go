@@ -58,7 +58,7 @@ func (s *networkService) NewInterfaceName() (string, error) {
 	slog.Debug("Generating new network interface name")
 
 	index := 0
-	breakGlassIndex := 10000
+	breakGlassIndex := 1000 //TODO: make this configurable?
 	for {
 		name := fmt.Sprintf("%s%d", interfacePrefix, index)
 		exists, err := s.InterfaceExists(name)
