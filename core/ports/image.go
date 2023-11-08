@@ -23,4 +23,7 @@ const (
 type ImageService interface {
 	// PullAndMount will pull an image and mount it.
 	PullAndMount(ctx context.Context, input PullAndMountInput) (*domain.Mount, error)
+
+	// Cleanup any images used by a VM.
+	Cleanup(ctx context.Context, owner string) error
 }

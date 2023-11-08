@@ -6,6 +6,8 @@ import (
 	"log/slog"
 
 	"github.com/containerd/containerd"
+	"github.com/containerd/containerd/leases"
+	"github.com/containerd/containerd/namespaces"
 
 	"github.com/mikrolite/mikrolite/core/domain"
 	"github.com/mikrolite/mikrolite/core/ports"
@@ -44,4 +46,18 @@ func (s *imageService) PullAndMount(ctx context.Context, input ports.PullAndMoun
 	}
 
 	return mount, nil
+}
+
+func (s *imageService) Cleanup(ctx context.Context, owner string) error {
+	slog.Info("Cleaning up images")
+
+	nsCtx := namespaces.WithNamespace(ctx, Namespace)
+	leaseName := leaseNameFromOwner(owner)
+	lease := leases.Lease{ID: leaseName}
+
+	if err := s.client.LeasesService().Delete(nsCtx, lease, leases.SynchronousDelete); err != nil {
+		return fmt.Errorf("deleting containerd lease %s: %w", leaseName, err)
+	}
+
+	return nil
 }

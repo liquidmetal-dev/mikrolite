@@ -1,17 +1,52 @@
 package vm
 
-import "github.com/spf13/cobra"
+import (
+	"fmt"
+	ctr "github.com/containerd/containerd"
+	"github.com/spf13/afero"
+	"github.com/spf13/cobra"
 
-func newRemoveVMCommand(cfh *commonConfig) *cobra.Command {
+	"github.com/mikrolite/mikrolite/adapters/containerd"
+	"github.com/mikrolite/mikrolite/adapters/filesystem"
+	"github.com/mikrolite/mikrolite/adapters/netlink"
+	"github.com/mikrolite/mikrolite/adapters/vm"
+	"github.com/mikrolite/mikrolite/core/app"
+)
+
+func newRemoveVMCommand(cfg *commonConfig) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "remove",
+		Use:   "remove [name]",
 		Short: "Remove a vm",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			vmName := args[0]
+
+			//TODO: move this to dependency injection
+			fsSvc := afero.NewOsFs()
+			stateSvc, err := filesystem.NewStateService(vmName, cfg.StateRootPath, fsSvc)
+			if err != nil {
+				return fmt.Errorf("creating state service: %w", err)
+			}
+			netSvc := netlink.New()
+			client, err := ctr.New(cfg.SocketPath)
+			if err != nil {
+				return fmt.Errorf("creating containerd client: %w", err)
+			}
+			imageSvc := containerd.NewImageService(client)
+			vmSvc, err := vm.New("firecracker", stateSvc, fsSvc)
+			if err != nil {
+				return fmt.Errorf("creating firecracker vm provider: %w", err)
+			}
+
+			owner := fmt.Sprintf("vm-%s", vmName)
+			a := app.New(imageSvc, vmSvc, stateSvc, fsSvc, netSvc)
+			if err := a.RemoveVM(cmd.Context(), vmName, owner); err != nil {
+				return fmt.Errorf("failed creating vm: %w", err)
+			}
+
 			return nil
 		},
 	}
-
-	//TODO: add flags
 
 	return cmd
 }
