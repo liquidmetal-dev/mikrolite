@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
+	"strings"
 
 	"github.com/firecracker-microvm/firecracker-go-sdk"
 	"github.com/mikrolite/mikrolite/cloudinit"
@@ -47,6 +49,15 @@ func (a *app) CreateVM(ctx context.Context, name string, owner string, vmSpec *d
 	if vm.Spec.Kernel.CmdLine == nil {
 		vm.Spec.Kernel.CmdLine = defaultKernelCmdLine()
 	}
+
+	//TEST ------------------
+	// Create a bridge using virt-manager and disabled dhcp
+	gw := "192.168.100.1/24"
+	vm.Spec.NetworkConfig.StaticIPv4Address = &domain.StaticIPv4Address{
+		Address: "192.168.100.10/24",
+		Gateway: &gw,
+	}
+	// END TEST
 
 	handlers := []handler{
 		a.handleKernel,
@@ -209,7 +220,11 @@ func generateNetworkConfig(vm *domain.VM) (string, error) {
 		eth.Match.Name = vm.Status.NetworkStatus.GuestDeviceName
 	}
 
-	//TODO: handle static ip
+	if vm.Spec.NetworkConfig.StaticIPv4Address != nil {
+		if err := addStaticIP(vm.Spec.NetworkConfig.StaticIPv4Address, eth); err != nil {
+			return "", fmt.Errorf("adding static ipv4 config: %w", err)
+		}
+	}
 
 	netConf.Ethernet[vm.Status.NetworkStatus.GuestDeviceName] = *eth
 
@@ -219,6 +234,40 @@ func generateNetworkConfig(vm *domain.VM) (string, error) {
 	}
 
 	return base64.StdEncoding.EncodeToString(nd), nil
+}
+
+func addStaticIP(ipConfig *domain.StaticIPv4Address, eth *cloudinit.Ethernet) error {
+	eth.DHCP4 = firecracker.Bool(false)
+	eth.DHCP6 = firecracker.Bool(false)
+	eth.Addresses = []string{ipConfig.Address}
+
+	if ipConfig.Gateway != nil && *ipConfig.Gateway != "" {
+		gwIp, err := getIPFromCIDR(*ipConfig.Gateway)
+		if err != nil {
+			return fmt.Errorf("failed to get IP from cidr %s: %w", *ipConfig.Gateway, err)
+		}
+		eth.GatewayIPv4 = gwIp
+	}
+
+	if len(ipConfig.Nameservers) == 0 {
+		return nil
+	}
+
+	eth.Nameservers = cloudinit.Nameservers{
+		Addresses: eth.Nameservers.Addresses,
+	}
+
+	return nil
+}
+
+func getIPFromCIDR(cidr string) (string, error) {
+	if _, _, err := net.ParseCIDR(cidr); err != nil {
+		return "", fmt.Errorf("parsing cidr: %w", err)
+	}
+
+	slashIndex := strings.Index(cidr, "/")
+
+	return cidr[:slashIndex], nil
 }
 
 func defaultKernelCmdLine() map[string]string {

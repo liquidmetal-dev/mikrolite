@@ -104,7 +104,14 @@ type HostPathKernelSource struct {
 // NetworkConfiguration is network configuration for the VM.
 type NetworkConfiguration struct {
 	// BridgeName is the name of the bridge to attach the vm to
-	BridgeName string `json:"bridge_name"`
+	BridgeName        string             `json:"bridge_name"`
+	StaticIPv4Address *StaticIPv4Address `json:"static_ipv4_address"`
+}
+
+type StaticIPv4Address struct {
+	Address     string   `json:"address"`
+	Gateway     *string  `json:"gateway,omitempty"`
+	Nameservers []string `json:"nameservers"`
 }
 
 // NetworkStatus holds information about the status of the network
