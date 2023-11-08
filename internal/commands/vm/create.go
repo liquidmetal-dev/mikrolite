@@ -29,6 +29,7 @@ func newCreateCommandVM(cfg *commonConfig) *cobra.Command {
 		BridgeName        string
 		StaticIP          string
 		StaticGatewayIP   string
+		SSHKeyFile        string
 	}{}
 
 	cmd := &cobra.Command{
@@ -72,6 +73,11 @@ func newCreateCommandVM(cfg *commonConfig) *cobra.Command {
 				}
 				if input.StaticGatewayIP != "" {
 					spec.NetworkConfig.StaticIPv4Address.Gateway = &input.StaticGatewayIP
+				}
+			}
+			if input.SSHKeyFile != "" {
+				spec.Bootstrap = &domain.Bootstrap{
+					SSHKey: input.SSHKeyFile,
 				}
 			}
 
@@ -118,6 +124,7 @@ func newCreateCommandVM(cfg *commonConfig) *cobra.Command {
 	cmd.Flags().StringVar(&input.BridgeName, "network-bridge", defaults.SharedBridgeName, "The name of the bridge to attach the vm to")
 	cmd.Flags().StringVar(&input.StaticIP, "static-ip", "", "A static IPV4 address (as a CIDR) to assign to the VM. If ommitted DHCP will be used")
 	cmd.Flags().StringVar(&input.StaticGatewayIP, "static-gateway-ip", "", "A gateway (as a CIDR) to use with the static IP")
+	cmd.Flags().StringVar(&input.SSHKeyFile, "ssh-key", "", "A SSH public key to use as an authorized key")
 
 	cmd.MarkFlagRequired("name")
 	cmd.MarkFlagRequired("root-image")

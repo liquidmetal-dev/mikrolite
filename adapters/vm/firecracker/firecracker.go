@@ -105,8 +105,21 @@ func (f *Provider) Create(ctx context.Context, vm *domain.VM) (string, error) {
 	}
 
 	cfg.NetworkInterfaces = sdk.NetworkInterfaces{netInt}
-
 	cfg.MmdsVersion = sdk.MMDSv1
+
+	args := []string{
+		"--id",
+		vm.Name,
+	}
+
+	if len(vm.Status.Metadata) > 0 {
+		metadataFile, err := f.saveMetadata(vm)
+		if err != nil {
+			return "", fmt.Errorf("saving metadata to file: %w", err)
+		}
+
+		args = append(args, "--metadata", metadataFile)
+	}
 
 	//TODO: this needs to be an optional arg for the path
 	cmd := sdk.VMCommandBuilder{}.
@@ -114,6 +127,7 @@ func (f *Provider) Create(ctx context.Context, vm *domain.VM) (string, error) {
 		WithBin("/home/richard/Downloads/firecracker-v1.5.0-x86_64/release-v1.5.0-x86_64/firecracker-v1.5.0-x86_64").
 		WithStderr(stdErrFile).
 		WithStdout(stdOutFile).
+		WithArgs(args).
 		Build(ctx)
 
 	m, err := sdk.NewMachine(ctx, cfg, sdk.WithProcessRunner(cmd))
