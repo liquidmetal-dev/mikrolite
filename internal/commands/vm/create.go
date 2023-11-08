@@ -9,9 +9,11 @@ import (
 
 	"github.com/mikrolite/mikrolite/adapters/containerd"
 	"github.com/mikrolite/mikrolite/adapters/filesystem"
+	"github.com/mikrolite/mikrolite/adapters/netlink"
 	"github.com/mikrolite/mikrolite/adapters/vm"
 	"github.com/mikrolite/mikrolite/core/app"
 	"github.com/mikrolite/mikrolite/core/domain"
+	"github.com/mikrolite/mikrolite/defaults"
 )
 
 func newCreateCommandVM(cfg *commonConfig) *cobra.Command {
@@ -23,6 +25,7 @@ func newCreateCommandVM(cfg *commonConfig) *cobra.Command {
 		KernelVolumeImage string
 		KernelFilename    string
 		KernelHostPath    string
+		BridgeName        string
 	}{}
 
 	cmd := &cobra.Command{
@@ -46,6 +49,9 @@ func newCreateCommandVM(cfg *commonConfig) *cobra.Command {
 						},
 					},
 				},
+				NetworkConfig: domain.NetworkConfiguration{
+					BridgeName: input.BridgeName,
+				},
 			}
 			if input.KernelVolumeImage != "" {
 				spec.Kernel.Source.Container = &domain.ContainerKernelSource{
@@ -64,6 +70,7 @@ func newCreateCommandVM(cfg *commonConfig) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("creating state service: %w", err)
 			}
+			netSvc := netlink.New()
 			client, err := ctr.New(cfg.SocketPath)
 			if err != nil {
 				return fmt.Errorf("creating containerd client: %w", err)
@@ -75,7 +82,7 @@ func newCreateCommandVM(cfg *commonConfig) *cobra.Command {
 			}
 
 			owner := fmt.Sprintf("vm-%s", input.Name)
-			a := app.New(imageSvc, vmSvc, stateSvc, fsSvc)
+			a := app.New(imageSvc, vmSvc, stateSvc, fsSvc, netSvc)
 			vm, err := a.CreateVM(cmd.Context(), input.Name, owner, spec)
 			if err != nil {
 				return fmt.Errorf("failed creating vm: %w", err)
@@ -93,6 +100,7 @@ func newCreateCommandVM(cfg *commonConfig) *cobra.Command {
 	cmd.Flags().StringVar(&input.KernelVolumeImage, "kernel-image", "", "The container to use for the kernel")
 	cmd.Flags().StringVar(&input.KernelHostPath, "kernel-path", "", "The path to a kernel file on the host")
 	cmd.Flags().StringVar(&input.KernelFilename, "kernel-filename", "vmlinux", "The name of the kernel file in the image or in the hostpath")
+	cmd.Flags().StringVar(&input.BridgeName, "network-bridge", defaults.SharedBridgeName, "The name of the bridge to attach the vm to")
 
 	cmd.MarkFlagRequired("name")
 	cmd.MarkFlagRequired("root-image")

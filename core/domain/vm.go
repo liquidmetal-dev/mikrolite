@@ -24,9 +24,8 @@ type VMSpec struct {
 	VCPU int `json:"vcpu"`
 	// MemoryInMb defines how much memory the vm should have.
 	MemoryInMb int `json:"memory_in_mb"`
-	// NetworkInterfaces defines the network interfaces that should be
-	// attached to the vm.
-	NetworkInterfaces []NetworkInterface `json:"network_interfaces"`
+	// NetworkConfig holds the configuration for the the vm networking
+	NetworkConfig NetworkConfiguration `json:"network_config"`
 }
 
 // VMStatus holds the runtime status information of the vm.
@@ -39,6 +38,9 @@ type VMStatus struct {
 
 	// NetworkNamespace is the netns for this vm
 	NetworkNamespace string
+
+	// NetworkStatus hols the status of the network.
+	NetworkStatus *NetworkStatus `json:"network_status,omitempty"`
 }
 
 // Kernel defines the kernel to use.
@@ -99,25 +101,21 @@ type HostPathKernelSource struct {
 	Path string `json:"path"`
 }
 
-// NetworkInterface defines a network interface for a vm.
-type NetworkInterface struct {
-	// GuestDeviceName is the name of the device on the guest.
-	GuestDeviceName string `json:"guest_device_name"`
-	// GuestMAC is the mac address to use.
-	GuestMAC string `json:"guest_mac"`
-	// Type is the type of interface
-	Type IfaceType `json:"type"`
-	// BridgeName is the name of the bridge to attach the interafec to.
+// NetworkConfiguration is network configuration for the VM.
+type NetworkConfiguration struct {
+	// BridgeName is the name of the bridge to attach the vm to
 	BridgeName string `json:"bridge_name"`
 }
 
-// IfaceType represent a network interface type.
-type IfaceType string
-
-const (
-	// IfaceTypeTap is a tap interface.
-	IfaceTypeTap IfaceType = "tap"
-)
+// NetworkStatus holds information about the status of the network
+type NetworkStatus struct {
+	// GuestMAC is the mac address to use.
+	GuestMAC string `json:"guest_mac"`
+	// GuestDeviceName is the name of the device on the guest.
+	GuestDeviceName string `json:"guest_device_name"`
+	// HostDeviceName is the name of the network device on the host
+	HostDeviveName string `json:"host_device_name"`
+}
 
 // Mount containes details of a mount.
 type Mount struct {
