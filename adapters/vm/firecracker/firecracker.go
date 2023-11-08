@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	sdk "github.com/firecracker-microvm/firecracker-go-sdk"
 	"github.com/firecracker-microvm/firecracker-go-sdk/client/models"
@@ -151,12 +152,45 @@ func (f *Provider) Create(ctx context.Context, vm *domain.VM) (string, error) {
 }
 
 // Stop will stop a running vm.
-func (f *Provider) Stop(ctx context.Context, id string) error {
+func (f *Provider) Stop(ctx context.Context, name string) error {
+	slog.Debug("stopping firecracker vm", "name", name)
+
+	pid, err := f.ss.GetPID()
+	if err != nil {
+		return fmt.Errorf("getting vm pid: %w", err)
+	}
+
+	if pid == 0 {
+		slog.Debug("pid not set for vm, skipping stop", "name", name)
+
+		return nil
+	}
+
+	p, _ := os.FindProcess(pid)
+	p.Signal(syscall.SIGHUP)
+
+	//TODO: wait for the process to exit
+
 	return nil
 }
 
 // Delete will delete a running vm.
-func (f *Provider) Delete(ctx context.Context, id string) error {
+func (f *Provider) Delete(ctx context.Context, name string) error {
+	pid, err := f.ss.GetPID()
+	if err != nil {
+		return fmt.Errorf("getting vm pid: %w", err)
+	}
+
+	if pid == 0 {
+		slog.Debug("pid not set for vm, skipping stop", "name", name)
+
+		return nil
+	}
+
+	if err := stopProcess(ctx, pid); err != nil {
+		return fmt.Errorf("stopping firecracker process: %w", err)
+	}
+
 	return nil
 }
 
@@ -205,4 +239,18 @@ func formatKernelCmdLine(args map[string]string) string {
 	}
 
 	return strings.Join(output, " ")
+}
+
+func stopProcess(ctx context.Context, pid int) error {
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return fmt.Errorf("finding process %d: %w", pid, err)
+	}
+
+	if err := proc.Kill(); err != nil {
+		slog.Debug("process kill failed, ignoring until we have better process detection")
+		return nil
+	}
+
+	return nil
 }

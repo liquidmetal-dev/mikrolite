@@ -110,6 +110,15 @@ func (s *stateService) SaveMetadata(meta map[string]string) error {
 
 func (s *stateService) GetPID() (int, error) {
 	pidFile := s.pidFileName()
+
+	fileExists, err := afero.Exists(s.fs, pidFile)
+	if err != nil {
+		return -1, fmt.Errorf("checking if pid file %s exists: %w", pidFile, err)
+	}
+	if !fileExists {
+		return 0, nil
+	}
+
 	file, err := s.fs.Open(pidFile)
 	if err != nil {
 		return -1, fmt.Errorf("opening pid file %s: %w", pidFile, err)
