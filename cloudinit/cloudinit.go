@@ -10,7 +10,7 @@ const (
 	// NetworkConfigDataKey is the metadata key name for the network config.
 	NetworkConfigDataKey = "network-config"
 	// VolumeName is the name of a volume that contains cloud-init data.
-	VolumeName = "CIDATA"
+	VolumeName = "cidata"
 )
 
 func IsCloudInitKey(keyName string) bool {

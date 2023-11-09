@@ -114,3 +114,16 @@ func (f *Provider) writeNetworkConfig(path, networkName string) error {
 func (f *Provider) socketPath() string {
 	return filepath.Join(f.ss.Root(), "firecracker.sock")
 }
+
+func defaultKernelCmdLine() map[string]string {
+	return map[string]string{
+		"console":       "ttyS0",
+		"reboot":        "k",
+		"panic":         "1",
+		"pci":           "off",
+		"i8042.noaux":   "",
+		"i8042.nomux":   "",
+		"i8042.nopnp":   "",
+		"i8042.dumbkbd": "",
+	}
+}
