@@ -13,6 +13,7 @@ import (
 	"github.com/mikrolite/mikrolite/cloudinit"
 	"github.com/mikrolite/mikrolite/core/domain"
 	"github.com/mikrolite/mikrolite/core/ports"
+	"github.com/spf13/afero"
 	"github.com/yitsushi/macpot"
 	"gopkg.in/yaml.v2"
 )
@@ -54,6 +55,8 @@ func (a *app) CreateVM(ctx context.Context, input ports.CreateVMInput) (*domain.
 		a.handleKernel,
 		a.handleVolumes,
 		a.handleNetwork,
+		a.handleMetadata,
+		a.handleVMCreateAndStart,
 	}
 
 	for _, h := range handlers {
@@ -62,14 +65,18 @@ func (a *app) CreateVM(ctx context.Context, input ports.CreateVMInput) (*domain.
 		}
 	}
 
-	_, err = a.vmService.Create(ctx, vm)
+	return nil, nil
+}
+
+func (a *app) handleVMCreateAndStart(ctx context.Context, owner string, vm *domain.VM) error {
+	_, err := a.vmService.Create(ctx, vm)
 	if err != nil {
-		return nil, fmt.Errorf("creating vm: %w", err)
+		return fmt.Errorf("creating vm: %w", err)
 	}
 
 	//TODO: add start if the provider supports start
 
-	return nil, nil
+	return nil
 }
 
 func (a *app) handleKernel(ctx context.Context, owner string, vm *domain.VM) error {
@@ -179,8 +186,8 @@ func (a *app) handleNetwork(ctx context.Context, owner string, vm *domain.VM) er
 		GuestMAC:        mac.ToString(),
 	}
 
-	//vm.Spec.Kernel.CmdLine["ds"] = "nocloud-net;s=http://169.254.169.254/latest/"
-	vm.Spec.Kernel.CmdLine["ds"] = "nocloud-net"
+	vm.Spec.Kernel.CmdLine["ds"] = "nocloud-net;s=http://169.254.169.254/latest/"
+	//vm.Spec.Kernel.CmdLine["ds"] = "nocloud-net"
 	networkConfig, err := generateNetworkConfig(vm)
 	if err != nil {
 		return fmt.Errorf("generating network config")
@@ -189,6 +196,55 @@ func (a *app) handleNetwork(ctx context.Context, owner string, vm *domain.VM) er
 	vm.Spec.Kernel.CmdLine["network-config"] = networkConfig
 
 	return nil
+}
+
+func (a *app) handleMetadata(ctx context.Context, owner string, vm *domain.VM) error {
+	if vm.Spec.Bootstrap == nil {
+		return nil
+	}
+
+	userdata, err := a.createUserData(vm.Spec.Bootstrap)
+	if err != nil {
+		return fmt.Errorf("generating user data: %w", err)
+	}
+
+	vm.Status.Metadata = map[string]string{
+		"user-data": userdata,
+	}
+
+	return nil
+
+}
+
+func (a *app) createUserData(bs *domain.Bootstrap) (string, error) {
+	userdata := &cloudinit.UserData{
+		FinalMessage: "mikrolite booted system",
+		BootCommands: []string{
+			"ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf",
+		},
+	}
+
+	if bs.SSHKey != "" {
+		data, err := afero.ReadFile(a.fs, bs.SSHKey)
+		if err != nil {
+			return "", fmt.Errorf("reading ssh key %s: %w", bs.SSHKey, err)
+		}
+		defaultUser := cloudinit.User{
+			Name:              "default",
+			SSHAuthorizedKeys: []string{string(data)},
+		}
+
+		userdata.Users = []cloudinit.User{defaultUser}
+	}
+
+	data, err := yaml.Marshal(userdata)
+	if err != nil {
+		return "", fmt.Errorf("marshalling userdate: %w", err)
+	}
+	dataWithHeader := append([]byte("## template: jinja\n#cloud-config\n\n"), data...)
+
+	return base64.StdEncoding.EncodeToString(dataWithHeader), nil
+
 }
 
 func generateNetworkConfig(vm *domain.VM) (string, error) {

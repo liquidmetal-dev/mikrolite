@@ -26,6 +26,9 @@ type VMSpec struct {
 	MemoryInMb int `json:"memory_in_mb"`
 	// NetworkConfig holds the configuration for the the vm networking
 	NetworkConfig NetworkConfiguration `json:"network_config"`
+
+	//TODO: should this be separate completely???
+	Bootstrap *Bootstrap `json:"bootstrap"`
 }
 
 // VMStatus holds the runtime status information of the vm.
@@ -41,6 +44,9 @@ type VMStatus struct {
 
 	// NetworkStatus hols the status of the network.
 	NetworkStatus *NetworkStatus `json:"network_status,omitempty"`
+
+	// Metadata holds any generated metadata.
+	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
 // Kernel defines the kernel to use.

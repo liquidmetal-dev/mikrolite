@@ -23,7 +23,7 @@ type networkService struct {
 func deleteLink(name string, linkType string) error {
 	link, err := netlink.LinkByName(name)
 	if err != nil {
-		if errors.Is(err, netlink.LinkNotFoundError{}) {
+		if errors.As(err, &netlink.LinkNotFoundError{}) {
 			slog.Debug("network link not found, skipping deletion", "name", name, "type", linkType)
 
 			return nil
