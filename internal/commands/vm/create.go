@@ -9,6 +9,7 @@ import (
 
 	"github.com/mikrolite/mikrolite/adapters/containerd"
 	"github.com/mikrolite/mikrolite/adapters/filesystem"
+	"github.com/mikrolite/mikrolite/adapters/godisk"
 	"github.com/mikrolite/mikrolite/adapters/netlink"
 	"github.com/mikrolite/mikrolite/adapters/vm"
 	"github.com/mikrolite/mikrolite/core/app"
@@ -87,13 +88,14 @@ func newCreateCommandVM(cfg *commonConfig) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("creating state service: %w", err)
 			}
+			diskSvc := godisk.New(fsSvc)
 			netSvc := netlink.New()
 			client, err := ctr.New(cfg.SocketPath)
 			if err != nil {
 				return fmt.Errorf("creating containerd client: %w", err)
 			}
 			imageSvc := containerd.NewImageService(client)
-			vmSvc, err := vm.New("firecracker", stateSvc, fsSvc)
+			vmSvc, err := vm.New("firecracker", stateSvc, diskSvc, fsSvc)
 			if err != nil {
 				return fmt.Errorf("creating firecracker vm provider: %w", err)
 			}

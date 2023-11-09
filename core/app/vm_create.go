@@ -186,55 +186,67 @@ func (a *app) handleNetwork(ctx context.Context, owner string, vm *domain.VM) er
 		GuestMAC:        mac.ToString(),
 	}
 
-	vm.Spec.Kernel.CmdLine["ds"] = "nocloud-net;s=http://169.254.169.254/latest/"
-	//vm.Spec.Kernel.CmdLine["ds"] = "nocloud-net"
-	networkConfig, err := generateNetworkConfig(vm)
-	if err != nil {
-		return fmt.Errorf("generating network config")
-	}
-	slog.Debug("created cloud-init networkconfig", "config", networkConfig)
-	vm.Spec.Kernel.CmdLine["network-config"] = networkConfig
+	/*
+		vm.Spec.Kernel.CmdLine["ds"] = "nocloud-net;s=http://169.254.169.254/latest/"
+		//vm.Spec.Kernel.CmdLine["ds"] = "nocloud-net"
+		networkConfig, err := generateNetworkConfig(vm)
+		if err != nil {
+			return fmt.Errorf("generating network config")
+		}
+		slog.Debug("created cloud-init networkconfig", "config", networkConfig)
+		vm.Spec.Kernel.CmdLine["network-config"] = networkConfig
+	*/
 
 	return nil
 }
 
 func (a *app) handleMetadata(ctx context.Context, owner string, vm *domain.VM) error {
-	if vm.Spec.Bootstrap == nil {
-		return nil
-	}
-
-	userdata, err := a.createUserData(vm.Spec.Bootstrap)
+	networkConfig, err := generateNetworkConfig(vm)
 	if err != nil {
-		return fmt.Errorf("generating user data: %w", err)
+		return fmt.Errorf("generating network config")
+	}
+	vm.Status.Metadata = map[string]string{
+		cloudinit.NetworkConfigDataKey: networkConfig,
 	}
 
-	vm.Status.Metadata = map[string]string{
-		"user-data": userdata,
+	if vm.Spec.Bootstrap != nil {
+
+		userdata, err := a.createUserData(vm)
+		if err != nil {
+			return fmt.Errorf("generating user data: %w", err)
+		}
+
+		vm.Status.Metadata[cloudinit.UserdataKey] = userdata
 	}
 
 	return nil
 
 }
 
-func (a *app) createUserData(bs *domain.Bootstrap) (string, error) {
+func (a *app) createUserData(vm *domain.VM) (string, error) {
 	userdata := &cloudinit.UserData{
 		FinalMessage: "mikrolite booted system",
 		BootCommands: []string{
 			"ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf",
 		},
+		HostName: vm.Name,
 	}
 
-	if bs.SSHKey != "" {
-		data, err := afero.ReadFile(a.fs, bs.SSHKey)
+	if vm.Spec.Bootstrap.SSHKey != "" {
+		data, err := afero.ReadFile(a.fs, vm.Spec.Bootstrap.SSHKey)
 		if err != nil {
-			return "", fmt.Errorf("reading ssh key %s: %w", bs.SSHKey, err)
+			return "", fmt.Errorf("reading ssh key %s: %w", vm.Spec.Bootstrap.SSHKey, err)
 		}
 		defaultUser := cloudinit.User{
-			Name:              "default",
+			Name:              "ubuntu",
+			SSHAuthorizedKeys: []string{string(data)},
+		}
+		rootUser := cloudinit.User{
+			Name:              "root",
 			SSHAuthorizedKeys: []string{string(data)},
 		}
 
-		userdata.Users = []cloudinit.User{defaultUser}
+		userdata.Users = []cloudinit.User{rootUser, defaultUser}
 	}
 
 	data, err := yaml.Marshal(userdata)
