@@ -132,7 +132,7 @@ func (f *Provider) Create(ctx context.Context, vm *domain.VM) (string, error) {
 	//TODO: this needs to be an optional arg for the path
 	cmd := sdk.VMCommandBuilder{}.
 		WithSocketPath(socketPath).
-		WithBin("/home/richard/Downloads/firecracker-v1.5.0-x86_64/release-v1.5.0-x86_64/firecracker-v1.5.0-x86_64").
+		WithBin(f.binaryPath).
 		WithStderr(stdErrFile).
 		WithStdout(stdOutFile).
 		WithArgs(args).
