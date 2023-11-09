@@ -9,10 +9,6 @@ import (
 	"github.com/vishvananda/netlink"
 )
 
-const (
-	interfacePrefix = "mlt"
-)
-
 func New() ports.NetworkService {
 	return &networkService{}
 }

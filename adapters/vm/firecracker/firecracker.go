@@ -76,6 +76,10 @@ func (f *Provider) Delete(ctx context.Context, name string) error {
 	return nil
 }
 
+func (f *Provider) HasMetadataService() bool {
+	return true
+}
+
 func (f *Provider) ensureLogPath() error {
 	logFile, err := f.fs.OpenFile(f.ss.LogPath(), os.O_WRONLY|os.O_CREATE|os.O_APPEND, defaults.DataFilePerm)
 	if err != nil {

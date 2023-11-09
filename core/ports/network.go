@@ -11,5 +11,5 @@ type NetworkService interface {
 
 	AttachToBridge(interfaceName string, bridgeName string) error
 
-	NewInterfaceName() (string, error)
+	NewInterfaceName(prefix string) (string, error)
 }

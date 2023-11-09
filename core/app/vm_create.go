@@ -13,6 +13,7 @@ import (
 	"github.com/mikrolite/mikrolite/cloudinit"
 	"github.com/mikrolite/mikrolite/core/domain"
 	"github.com/mikrolite/mikrolite/core/ports"
+	"github.com/mikrolite/mikrolite/defaults"
 	"github.com/spf13/afero"
 	"github.com/yitsushi/macpot"
 	"gopkg.in/yaml.v2"
@@ -52,6 +53,7 @@ func (a *app) CreateVM(ctx context.Context, input ports.CreateVMInput) (*domain.
 	}
 
 	handlers := []handler{
+		a.handleMetadataService,
 		a.handleKernel,
 		a.handleVolumes,
 		a.handleNetwork,
@@ -149,53 +151,79 @@ func (a *app) handleVolume(ctx context.Context, owner string, volume *domain.Vol
 	return nil, errors.New("unexpected")
 }
 
+func (a *app) handleMetadataService(ctx context.Context, owner string, vm *domain.VM) error {
+	if !a.vmService.HasMetadataService() {
+		slog.Debug("vm provider doesn't have metadata service")
+
+		return nil
+	}
+
+	metadataInt := &domain.NetwortInterface{
+		GuestDeviceName:       "eth1",
+		AllowMetadataRequests: true,
+		AttachToBridge:        false,
+		StaticIPv4Address: &domain.StaticIPv4Address{
+			Address: "169.254.169.200/16",
+			//Gateway: firecracker.String("169.254.169.254/16"),
+		},
+	}
+
+	vm.Spec.NetworkConfiguration.Interfaces["eth1"] = *metadataInt
+
+	return nil
+}
+
 func (a *app) handleNetwork(ctx context.Context, owner string, vm *domain.VM) error {
 	slog.Info("Setting up network")
 
-	mac, err := macpot.New(macpot.AsLocal(), macpot.AsUnicast())
-	if err != nil {
-		return fmt.Errorf("creating mac address vm: %w", err)
-	}
-
-	bridgeExists, err := a.networkService.BridgeExists(vm.Spec.NetworkConfig.BridgeName)
+	bridgeExists, err := a.networkService.BridgeExists(vm.Spec.NetworkConfiguration.BridgeName)
 	if err != nil {
 		return fmt.Errorf("checking if bridge exists")
 	}
+	// TODO: allow creation of bridge if it doesn't exists
+	// if !bridgeExists {
+	// 	if createErr := a.networkService.BridgeCreate(vm.Spec.NetworkConfig.BridgeName); createErr != nil {
+	// 		return fmt.Errorf("creating bridge %s: %w", vm.Spec.NetworkConfig.BridgeName, err)
+	// 	}
+	// }
 	if !bridgeExists {
-		if createErr := a.networkService.BridgeCreate(vm.Spec.NetworkConfig.BridgeName); createErr != nil {
-			return fmt.Errorf("creating bridge %s: %w", vm.Spec.NetworkConfig.BridgeName, err)
-		}
+		return errors.New("currently the network bridge must exists already. Create it using virt-manager/virsh")
 	}
 
-	ifaceName, err := a.networkService.NewInterfaceName()
-	if err != nil {
-		return fmt.Errorf("getting vm network interface name: %s", err)
-	}
+	vm.Status.NetworkStatus = map[string]domain.NetworkStatus{}
+	for name, intCfg := range vm.Spec.NetworkConfiguration.Interfaces {
+		slog.Debug("handling network interface", "name", name)
 
-	if createErr := a.networkService.InterfaceCreate(ifaceName, mac.ToString()); createErr != nil {
-		return fmt.Errorf("creating vm network interface %s: %w", ifaceName, createErr)
-	}
-
-	if attachErr := a.networkService.AttachToBridge(ifaceName, vm.Spec.NetworkConfig.BridgeName); attachErr != nil {
-		return fmt.Errorf("attching vm interface to bridge: %w", attachErr)
-	}
-
-	vm.Status.NetworkStatus = &domain.NetworkStatus{
-		HostDeviveName:  ifaceName,
-		GuestDeviceName: "eth0",
-		GuestMAC:        mac.ToString(),
-	}
-
-	/*
-		vm.Spec.Kernel.CmdLine["ds"] = "nocloud-net;s=http://169.254.169.254/latest/"
-		//vm.Spec.Kernel.CmdLine["ds"] = "nocloud-net"
-		networkConfig, err := generateNetworkConfig(vm)
+		mac, err := macpot.New(macpot.AsLocal(), macpot.AsUnicast())
 		if err != nil {
-			return fmt.Errorf("generating network config")
+			return fmt.Errorf("creating mac address vm: %w", err)
 		}
-		slog.Debug("created cloud-init networkconfig", "config", networkConfig)
-		vm.Spec.Kernel.CmdLine["network-config"] = networkConfig
-	*/
+
+		ifacePrefx := defaults.InterfacePrefix
+		if intCfg.AllowMetadataRequests {
+			ifacePrefx = defaults.MetadataInterfacePrefix
+		}
+
+		ifaceName, err := a.networkService.NewInterfaceName(ifacePrefx)
+		if err != nil {
+			return fmt.Errorf("getting vm network interface name: %s", err)
+		}
+
+		if createErr := a.networkService.InterfaceCreate(ifaceName, mac.ToString()); createErr != nil {
+			return fmt.Errorf("creating vm network interface %s: %w", ifaceName, createErr)
+		}
+
+		if intCfg.AttachToBridge {
+			if attachErr := a.networkService.AttachToBridge(ifaceName, vm.Spec.NetworkConfiguration.BridgeName); attachErr != nil {
+				return fmt.Errorf("attching vm interface to bridge: %w", attachErr)
+			}
+		}
+
+		vm.Status.NetworkStatus[name] = domain.NetworkStatus{
+			HostDeviveName: ifaceName,
+			GuestMAC:       mac.ToString(),
+		}
+	}
 
 	return nil
 }
@@ -237,16 +265,16 @@ func (a *app) createUserData(vm *domain.VM) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("reading ssh key %s: %w", vm.Spec.Bootstrap.SSHKey, err)
 		}
-		defaultUser := cloudinit.User{
-			Name:              "ubuntu",
-			SSHAuthorizedKeys: []string{string(data)},
-		}
-		rootUser := cloudinit.User{
-			Name:              "root",
+		user := cloudinit.User{
+			Name:              "ml",
+			Gecos:             "Mikrolite user",
+			Shell:             "/bin/bash",
+			Groups:            "sudo",
+			Sudo:              "ALL=(ALL) NOPASSWD:ALL",
 			SSHAuthorizedKeys: []string{string(data)},
 		}
 
-		userdata.Users = []cloudinit.User{rootUser, defaultUser}
+		userdata.Users = []cloudinit.User{user}
 	}
 
 	data, err := yaml.Marshal(userdata)
@@ -265,27 +293,23 @@ func generateNetworkConfig(vm *domain.VM) (string, error) {
 		Ethernet: map[string]cloudinit.Ethernet{},
 	}
 
-	eth := &cloudinit.Ethernet{
-		Match:          cloudinit.Match{},
-		DHCP4:          firecracker.Bool(true),
-		DHCP6:          firecracker.Bool(true),
-		DHCPIdentifier: firecracker.String(cloudinit.DhcpIdentifierMac),
-	}
-
-	//macAddress := vm.Status.NetworkStatus.GuestMAC
-	//if macAddress != "" {
-	//		eth.Match.MACAddress = macAddress
-	//	} else {
-	eth.Match.Name = vm.Status.NetworkStatus.GuestDeviceName
-	//	}
-
-	if vm.Spec.NetworkConfig.StaticIPv4Address != nil {
-		if err := addStaticIP(vm.Spec.NetworkConfig.StaticIPv4Address, eth); err != nil {
-			return "", fmt.Errorf("adding static ipv4 config: %w", err)
+	for _, netInt := range vm.Spec.NetworkConfiguration.Interfaces {
+		eth := &cloudinit.Ethernet{
+			Match: cloudinit.Match{
+				Name: netInt.GuestDeviceName,
+			},
+			DHCP4:          firecracker.Bool(true),
+			DHCPIdentifier: firecracker.String(cloudinit.DhcpIdentifierMac),
 		}
-	}
 
-	netConf.Ethernet[vm.Status.NetworkStatus.GuestDeviceName] = *eth
+		if netInt.StaticIPv4Address != nil {
+			if err := addStaticIP(netInt.StaticIPv4Address, eth); err != nil {
+				return "", fmt.Errorf("adding static ipv4 config: %w", err)
+			}
+		}
+
+		netConf.Ethernet[netInt.GuestDeviceName] = *eth
+	}
 
 	nd, err := yaml.Marshal(netConf)
 	if err != nil {
@@ -297,7 +321,6 @@ func generateNetworkConfig(vm *domain.VM) (string, error) {
 
 func addStaticIP(ipConfig *domain.StaticIPv4Address, eth *cloudinit.Ethernet) error {
 	eth.DHCP4 = firecracker.Bool(false)
-	eth.DHCP6 = firecracker.Bool(false)
 	eth.Addresses = []string{ipConfig.Address}
 
 	if ipConfig.Gateway != nil && *ipConfig.Gateway != "" {
@@ -305,7 +328,16 @@ func addStaticIP(ipConfig *domain.StaticIPv4Address, eth *cloudinit.Ethernet) er
 		if err != nil {
 			return fmt.Errorf("failed to get IP from cidr %s: %w", *ipConfig.Gateway, err)
 		}
+
 		eth.GatewayIPv4 = gwIp
+		// eth.Routes = []cloudinit.Routes{
+		// 	{
+		// 		To:     "default",
+		// 		Via:    gwIp,
+		// 		OnLink: firecracker.Bool(true),
+		// 		Metric: firecracker.Int(100),
+		// 	},
+		// }
 	}
 
 	if len(ipConfig.Nameservers) == 0 {
