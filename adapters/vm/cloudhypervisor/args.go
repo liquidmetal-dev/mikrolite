@@ -22,13 +22,11 @@ func (p *provider) buildArgs(vm *domain.VM, cloudInitFile string) ([]string, err
 	}
 
 	// Kernel and cmdline args
-	kernelCmdLine := defaultKernelCmdLine()
-
-	for key, value := range vm.Spec.Kernel.CmdLine {
-		kernelCmdLine[key] = value
+	if len(vm.Spec.Kernel.CmdLine) == 0 {
+		vm.Spec.Kernel.CmdLine = defaultKernelCmdLine()
 	}
 
-	args = append(args, "--cmdline", shared.FormatKernelCmdLine(kernelCmdLine))
+	args = append(args, "--cmdline", shared.FormatKernelCmdLine(vm.Spec.Kernel.CmdLine))
 	args = append(args, "--kernel", kernelPath)
 
 	// CPU and memory
@@ -77,5 +75,6 @@ func defaultKernelCmdLine() map[string]string {
 		"rw":      "",
 		"reboot":  "k",
 		"panic":   "1",
+		"ds":      "nocloud",
 	}
 }

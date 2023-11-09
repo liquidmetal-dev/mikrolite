@@ -20,5 +20,8 @@
 # Go workspace file
 go.work
 
+.tags
+.tags.temp
+
 .vscode/
 .idea/

@@ -48,9 +48,6 @@ func (a *app) CreateVM(ctx context.Context, input ports.CreateVMInput) (*domain.
 		VolumeMounts: map[string]domain.Mount{},
 	}
 	vm.Status.NetworkNamespace = fmt.Sprintf("/var/run/netns/mikrolite-%s", input.Name)
-	if vm.Spec.Kernel.CmdLine == nil {
-		vm.Spec.Kernel.CmdLine = defaultKernelCmdLine()
-	}
 
 	handlers := []handler{
 		a.handleMetadataService,
@@ -237,6 +234,12 @@ func (a *app) handleMetadata(ctx context.Context, owner string, vm *domain.VM) e
 		cloudinit.NetworkConfigDataKey: networkConfig,
 	}
 
+	metadata, err := a.createMetadata(vm)
+	if err != nil {
+		return fmt.Errorf("generating metada data: %w", err)
+	}
+	vm.Status.Metadata[cloudinit.InstanceDataKey] = metadata
+
 	if vm.Spec.Bootstrap != nil {
 
 		userdata, err := a.createUserData(vm)
@@ -249,6 +252,19 @@ func (a *app) handleMetadata(ctx context.Context, owner string, vm *domain.VM) e
 
 	return nil
 
+}
+
+func (a *app) createMetadata(vm *domain.VM) (string, error) {
+	metadata := map[string]string{}
+	metadata["instance_id"] = vm.Name
+	metadata["cloud_name"] = "mikrolite"
+
+	data, err := yaml.Marshal(&metadata)
+	if err != nil {
+		return "", fmt.Errorf("marshalling metadata: %w", err)
+	}
+
+	return base64.StdEncoding.EncodeToString(data), nil
 }
 
 func (a *app) createUserData(vm *domain.VM) (string, error) {
@@ -293,10 +309,15 @@ func generateNetworkConfig(vm *domain.VM) (string, error) {
 		Ethernet: map[string]cloudinit.Ethernet{},
 	}
 
-	for _, netInt := range vm.Spec.NetworkConfiguration.Interfaces {
+	for name, netInt := range vm.Spec.NetworkConfiguration.Interfaces {
+		status, ok := vm.Status.NetworkStatus[name]
+		if !ok {
+			return "", fmt.Errorf("failed to get network status for %s", name)
+		}
+
 		eth := &cloudinit.Ethernet{
 			Match: cloudinit.Match{
-				Name: netInt.GuestDeviceName,
+				MACAddress: status.GuestMAC,
 			},
 			DHCP4:          firecracker.Bool(true),
 			DHCPIdentifier: firecracker.String(cloudinit.DhcpIdentifierMac),
@@ -359,17 +380,4 @@ func getIPFromCIDR(cidr string) (string, error) {
 	slashIndex := strings.Index(cidr, "/")
 
 	return cidr[:slashIndex], nil
-}
-
-func defaultKernelCmdLine() map[string]string {
-	return map[string]string{
-		"console":       "ttyS0",
-		"reboot":        "k",
-		"panic":         "1",
-		"pci":           "off",
-		"i8042.noaux":   "",
-		"i8042.nomux":   "",
-		"i8042.nopnp":   "",
-		"i8042.dumbkbd": "",
-	}
 }

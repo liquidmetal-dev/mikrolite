@@ -34,7 +34,7 @@ func CreateCloudInitImage(ctx context.Context, includeNetworkConfig bool, vm *do
 		Path:       cloudInitFile,
 		Size:       "8Mb",
 		VolumeName: cloudinit.VolumeName,
-		Type:       ports.DiskTypeISO9660,
+		Type:       ports.DiskTypeFat32,
 		Overwrite:  true,
 		Files:      files,
 	}

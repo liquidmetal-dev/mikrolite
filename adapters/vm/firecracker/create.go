@@ -22,6 +22,9 @@ func (f *Provider) Create(ctx context.Context, vm *domain.VM) (string, error) {
 	socketPath := f.socketPath()
 	kernelPath := filepath.Join(vm.Status.KernelMount.Location, vm.Spec.Kernel.Source.Filename)
 	//networkCfgPath := fmt.Sprintf("%s/fcnet.conflist", f.ss.Root())
+	if len(vm.Spec.Kernel.CmdLine) == 0 {
+		vm.Spec.Kernel.CmdLine = defaultKernelCmdLine()
+	}
 
 	if err := f.ensureLogPath(); err != nil {
 		return "", fmt.Errorf("ensuring log file is created: %w", err)
