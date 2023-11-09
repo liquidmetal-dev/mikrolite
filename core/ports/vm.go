@@ -14,4 +14,8 @@ type VMProvider interface {
 	Stop(ctx context.Context, id string) error
 	// Delete will delete a running vm.
 	Delete(ctx context.Context, id string) error
+
+	// HasMetadataService returns true if the provider has a metadata service
+	// NOTE: we could expose features like this using "capabilities"
+	HasMetadataService() bool
 }

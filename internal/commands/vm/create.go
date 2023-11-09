@@ -54,8 +54,9 @@ func newCreateCommandVM(cfg *commonConfig) *cobra.Command {
 						},
 					},
 				},
-				NetworkConfig: domain.NetworkConfiguration{
+				NetworkConfiguration: domain.NetworkConfiguration{
 					BridgeName: input.BridgeName,
+					Interfaces: map[string]domain.NetwortInterface{},
 				},
 			}
 			if input.KernelVolumeImage != "" {
@@ -68,14 +69,23 @@ func newCreateCommandVM(cfg *commonConfig) *cobra.Command {
 					Path: input.KernelHostPath,
 				}
 			}
+			netInt := domain.NetwortInterface{
+				GuestDeviceName:       "eth0",
+				AllowMetadataRequests: false,
+				AttachToBridge:        true,
+			}
+
 			if input.StaticIP != "" {
-				spec.NetworkConfig.StaticIPv4Address = &domain.StaticIPv4Address{
+				netInt.StaticIPv4Address = &domain.StaticIPv4Address{
 					Address: input.StaticIP,
 				}
+
 				if input.StaticGatewayIP != "" {
-					spec.NetworkConfig.StaticIPv4Address.Gateway = &input.StaticGatewayIP
+					netInt.StaticIPv4Address.Gateway = &input.StaticGatewayIP
 				}
 			}
+			spec.NetworkConfiguration.Interfaces["eth0"] = netInt
+
 			if input.SSHKeyFile != "" {
 				spec.Bootstrap = &domain.Bootstrap{
 					SSHKey: input.SSHKeyFile,

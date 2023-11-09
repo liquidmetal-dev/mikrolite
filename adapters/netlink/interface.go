@@ -54,13 +54,13 @@ func (s *networkService) InterfaceExists(name string) (bool, error) {
 	return linkExists(name, "interface")
 }
 
-func (s *networkService) NewInterfaceName() (string, error) {
+func (s *networkService) NewInterfaceName(prefix string) (string, error) {
 	slog.Debug("Generating new network interface name")
 
 	index := 0
 	breakGlassIndex := 1000 //TODO: make this configurable?
 	for {
-		name := fmt.Sprintf("%s%d", interfacePrefix, index)
+		name := fmt.Sprintf("%s%d", prefix, index)
 		exists, err := s.InterfaceExists(name)
 		if err != nil {
 			return "", fmt.Errorf("checking if interface %s exists: %w", name, err)

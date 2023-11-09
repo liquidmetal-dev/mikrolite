@@ -15,6 +15,7 @@ type UserData struct {
 
 type User struct {
 	Name              string   `yaml:"name"`
+	Gecos             string   `yaml:"gecos"`
 	Sudo              string   `yaml:"sudo,omitempty"`
 	Groups            string   `yaml:"groups,omitempty"`
 	Home              string   `yaml:"home,omitempty"`

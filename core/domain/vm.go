@@ -24,8 +24,8 @@ type VMSpec struct {
 	VCPU int `json:"vcpu"`
 	// MemoryInMb defines how much memory the vm should have.
 	MemoryInMb int `json:"memory_in_mb"`
-	// NetworkConfig holds the configuration for the the vm networking
-	NetworkConfig NetworkConfiguration `json:"network_config"`
+	// NetworkConfiguration holds the configuration for the the vm networking
+	NetworkConfiguration NetworkConfiguration `json:"network_configuration"`
 
 	//TODO: should this be separate completely???
 	Bootstrap *Bootstrap `json:"bootstrap"`
@@ -43,7 +43,7 @@ type VMStatus struct {
 	NetworkNamespace string
 
 	// NetworkStatus hols the status of the network.
-	NetworkStatus *NetworkStatus `json:"network_status,omitempty"`
+	NetworkStatus map[string]NetworkStatus `json:"network_status,omitempty"`
 
 	// Metadata holds any generated metadata.
 	Metadata map[string]string `json:"metadata,omitempty"`
@@ -107,11 +107,17 @@ type HostPathKernelSource struct {
 	Path string `json:"path"`
 }
 
-// NetworkConfiguration is network configuration for the VM.
 type NetworkConfiguration struct {
-	// BridgeName is the name of the bridge to attach the vm to
-	BridgeName        string             `json:"bridge_name"`
-	StaticIPv4Address *StaticIPv4Address `json:"static_ipv4_address"`
+	BridgeName string                      `json:"bridge_name"`
+	Interfaces map[string]NetwortInterface `json:"interfaces,omitempty"`
+}
+
+// NetwortkInterface is network interface attached to the vm.
+type NetwortInterface struct {
+	GuestDeviceName       string             `json:"guest_device_name"`
+	AllowMetadataRequests bool               `json:"allow_metadata_requests"`
+	AttachToBridge        bool               `json:"attach_to_bridge"`
+	StaticIPv4Address     *StaticIPv4Address `json:"static_ipv4_address"`
 }
 
 type StaticIPv4Address struct {
@@ -124,8 +130,6 @@ type StaticIPv4Address struct {
 type NetworkStatus struct {
 	// GuestMAC is the mac address to use.
 	GuestMAC string `json:"guest_mac"`
-	// GuestDeviceName is the name of the device on the guest.
-	GuestDeviceName string `json:"guest_device_name"`
 	// HostDeviceName is the name of the network device on the host
 	HostDeviveName string `json:"host_device_name"`
 }

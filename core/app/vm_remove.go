@@ -26,8 +26,10 @@ func (a *app) RemoveVM(ctx context.Context, name string, owner string) error {
 		return fmt.Errorf("getting vm config: %w", err)
 	}
 
-	if err := a.networkService.InterfaceDelete(vm.Status.NetworkStatus.HostDeviveName); err != nil {
-		return fmt.Errorf("deleting vm network interface: %w", err)
+	for _, netStatus := range vm.Status.NetworkStatus {
+		if err := a.networkService.InterfaceDelete(netStatus.HostDeviveName); err != nil {
+			return fmt.Errorf("deleting vm network interface: %w", err)
+		}
 	}
 
 	if err := a.fs.RemoveAll(a.stateService.Root()); err != nil {

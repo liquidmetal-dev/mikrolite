@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/mikrolite/mikrolite/adapters/vm/shared"
 	"github.com/mikrolite/mikrolite/cloudinit"
 
 	sdk "github.com/firecracker-microvm/firecracker-go-sdk"
@@ -37,22 +36,15 @@ func (f *Provider) Create(ctx context.Context, vm *domain.VM) (string, error) {
 		return "", fmt.Errorf("opening sterr file %s: %w", f.ss.StderrPath(), err)
 	}
 
-	//metadataFile := ""
+	metadataFile := ""
 	if len(vm.Status.Metadata) > 0 {
-		// metadataFile, err = f.saveMetadata(vm)
-		// if err != nil {
-		// 	return "", fmt.Errorf("saving metadata to file: %w", err)
-		// }
+		metadataFile, err = f.saveMetadata(vm)
+		if err != nil {
+			return "", fmt.Errorf("saving metadata to file: %w", err)
+		}
 
-		// vm.Spec.Kernel.CmdLine["ds"] = "nocloud-net;s=http://169.254.169.254/latest/"
-		// vm.Spec.Kernel.CmdLine[cloudinit.NetworkConfigDataKey] = vm.Status.Metadata[cloudinit.NetworkConfigDataKey]
-
-		vm.Spec.Kernel.CmdLine["ds"] = "nocloud"
+		vm.Spec.Kernel.CmdLine["ds"] = "nocloud-net;s=http://169.254.169.254/latest/"
 		vm.Spec.Kernel.CmdLine[cloudinit.NetworkConfigDataKey] = vm.Status.Metadata[cloudinit.NetworkConfigDataKey]
-
-		// for k, v := range vm.Status.Metadata {
-		// 	vm.Spec.Kernel.CmdLine[k] = v
-		// }
 	}
 
 	//f.writeNetworkConfig(networkCfgPath, "fcnet")
@@ -73,18 +65,18 @@ func (f *Provider) Create(ctx context.Context, vm *domain.VM) (string, error) {
 		LogLevel: "Debug",
 	}
 
-	if len(vm.Status.Metadata) > 0 {
-		cloudInitFile, err := shared.CreateCloudInitImage(ctx, false, vm, f.ss, f.ds)
-		if err != nil {
-			return "", fmt.Errorf("creating cloud-init disk image: %w", err)
-		}
-		cfg.Drives = append(cfg.Drives, models.Drive{
-			DriveID:      strPtr(cloudinit.VolumeName),
-			IsReadOnly:   boolPtr(true),
-			IsRootDevice: boolPtr(false),
-			PathOnHost:   strPtr(cloudInitFile),
-		})
-	}
+	// if len(vm.Status.Metadata) > 0 {
+	// 	cloudInitFile, err := shared.CreateCloudInitImage(ctx, false, vm, f.ss, f.ds)
+	// 	if err != nil {
+	// 		return "", fmt.Errorf("creating cloud-init disk image: %w", err)
+	// 	}
+	// 	cfg.Drives = append(cfg.Drives, models.Drive{
+	// 		DriveID:      strPtr(cloudinit.VolumeName),
+	// 		IsReadOnly:   boolPtr(true),
+	// 		IsRootDevice: boolPtr(false),
+	// 		PathOnHost:   strPtr(cloudInitFile),
+	// 	})
+	// }
 
 	for id, mount := range vm.Status.VolumeMounts {
 		isRoot := id == "root"
@@ -109,24 +101,29 @@ func (f *Provider) Create(ctx context.Context, vm *domain.VM) (string, error) {
 	// 		AllowMMDS: true,
 	// 	},
 	// }
-	netInt := sdk.NetworkInterface{
-		StaticConfiguration: &sdk.StaticNetworkConfiguration{
-			MacAddress:  vm.Status.NetworkStatus.GuestMAC,
-			HostDevName: vm.Status.NetworkStatus.HostDeviveName,
-		},
-		AllowMMDS: false,
-	}
+	cfg.NetworkInterfaces = sdk.NetworkInterfaces{}
+	for name, netInt := range vm.Spec.NetworkConfiguration.Interfaces {
+		status, ok := vm.Status.NetworkStatus[name]
+		if !ok {
+			return "", fmt.Errorf("failed to get network status for %s: %w", name, err)
+		}
 
-	cfg.NetworkInterfaces = sdk.NetworkInterfaces{netInt}
+		netInt := sdk.NetworkInterface{
+			StaticConfiguration: &sdk.StaticNetworkConfiguration{
+				MacAddress:  status.GuestMAC,
+				HostDevName: status.HostDeviveName,
+			},
+			AllowMMDS: netInt.AllowMetadataRequests,
+		}
+
+		cfg.NetworkInterfaces = append(cfg.NetworkInterfaces, netInt)
+	}
 	cfg.MmdsVersion = sdk.MMDSv1
 
-	// args := []string{
-	// 	"--id",
-	// 	vm.Name,
-	// }
-	// if metadataFile != "" {
-	// 	args = append(args, "--metadata", metadataFile)
-	// }
+	args := []string{}
+	if metadataFile != "" {
+		args = append(args, "--metadata", metadataFile)
+	}
 
 	//TODO: this needs to be an optional arg for the path
 	cmd := sdk.VMCommandBuilder{}.
@@ -134,7 +131,7 @@ func (f *Provider) Create(ctx context.Context, vm *domain.VM) (string, error) {
 		WithBin("/home/richard/Downloads/firecracker-v1.5.0-x86_64/release-v1.5.0-x86_64/firecracker-v1.5.0-x86_64").
 		WithStderr(stdErrFile).
 		WithStdout(stdOutFile).
-		//WithArgs(args).
+		WithArgs(args).
 		Build(ctx)
 
 	m, err := sdk.NewMachine(ctx, cfg, sdk.WithProcessRunner(cmd))
@@ -166,6 +163,12 @@ func (f *Provider) Create(ctx context.Context, vm *domain.VM) (string, error) {
 	litter.Dump(info)
 	slog.Debug("FC machine cfg")
 	litter.Dump(m.Cfg)
+
+	// meta := &metadata{}
+	// if err := m.GetMetadata(ctx, meta); err != nil {
+	// 	slog.Error("failed to get the metadata", "error", err.Error())
+	// }
+	// litter.Dump(meta)
 
 	// END -------
 
