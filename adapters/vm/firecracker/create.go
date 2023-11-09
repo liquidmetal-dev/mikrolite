@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/mikrolite/mikrolite/adapters/vm/shared"
 	"github.com/mikrolite/mikrolite/cloudinit"
 
 	sdk "github.com/firecracker-microvm/firecracker-go-sdk"
@@ -54,7 +55,7 @@ func (f *Provider) Create(ctx context.Context, vm *domain.VM) (string, error) {
 		//NetNS:           vm.Status.NetworkNamespace,
 		SocketPath:      socketPath,
 		KernelImagePath: kernelPath,
-		KernelArgs:      formatKernelCmdLine(vm.Spec.Kernel.CmdLine),
+		KernelArgs:      shared.FormatKernelCmdLine(vm.Spec.Kernel.CmdLine),
 		MachineCfg: models.MachineConfiguration{
 			VcpuCount:  intTo64Ptr(vm.Spec.VCPU),
 			MemSizeMib: intTo64Ptr(vm.Spec.MemoryInMb),

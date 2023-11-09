@@ -105,9 +105,15 @@ func newCreateCommandVM(cfg *commonConfig) *cobra.Command {
 				return fmt.Errorf("creating containerd client: %w", err)
 			}
 			imageSvc := containerd.NewImageService(client)
-			vmSvc, err := vm.New("firecracker", stateSvc, diskSvc, fsSvc)
+			vmSvc, err := vm.New(cfg.VMProvider, vm.VMProviderProps{
+				StateService:       stateSvc,
+				DiskSvc:            diskSvc,
+				Fs:                 fsSvc,
+				FirecrackerBin:     cfg.FirecrackerBin,
+				CloudHypervisorBin: cfg.CloudHypervisorBin,
+			})
 			if err != nil {
-				return fmt.Errorf("creating firecracker vm provider: %w", err)
+				return fmt.Errorf("creating vm provider %s: %w", cfg.VMProvider, err)
 			}
 
 			owner := fmt.Sprintf("vm-%s", input.Name)
