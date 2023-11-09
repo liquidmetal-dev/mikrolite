@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/mikrolite/mikrolite/cloudinit"
 	"github.com/mikrolite/mikrolite/core/domain"
 	"github.com/mikrolite/mikrolite/defaults"
 )
@@ -23,9 +24,13 @@ func (f *Provider) saveMetadata(vm *domain.VM) (string, error) {
 	}
 
 	for key, value := range vm.Status.Metadata {
+		if key == cloudinit.NetworkConfigDataKey {
+			continue
+		}
+
 		decodedValue, err := base64.StdEncoding.DecodeString(value)
 		if err != nil {
-			return "", fmt.Errorf("decoding metadata %s: %w", &key, err)
+			return "", fmt.Errorf("decoding metadata %s: %w", key, err)
 		}
 
 		meta.Latest[key] = string(decodedValue)
