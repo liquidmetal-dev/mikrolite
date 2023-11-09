@@ -13,6 +13,7 @@ import (
 	"github.com/mikrolite/mikrolite/adapters/vm"
 	"github.com/mikrolite/mikrolite/core/app"
 	"github.com/mikrolite/mikrolite/core/domain"
+	"github.com/mikrolite/mikrolite/core/ports"
 	"github.com/mikrolite/mikrolite/defaults"
 )
 
@@ -26,6 +27,8 @@ func newCreateCommandVM(cfg *commonConfig) *cobra.Command {
 		KernelFilename    string
 		KernelHostPath    string
 		BridgeName        string
+		StaticIP          string
+		StaticGatewayIP   string
 	}{}
 
 	cmd := &cobra.Command{
@@ -63,6 +66,14 @@ func newCreateCommandVM(cfg *commonConfig) *cobra.Command {
 					Path: input.KernelHostPath,
 				}
 			}
+			if input.StaticIP != "" {
+				spec.NetworkConfig.StaticIPv4Address = &domain.StaticIPv4Address{
+					Address: input.StaticIP,
+				}
+				if input.StaticGatewayIP != "" {
+					spec.NetworkConfig.StaticIPv4Address.Gateway = &input.StaticGatewayIP
+				}
+			}
 
 			//TODO: move this to dependency injection
 			fsSvc := afero.NewOsFs()
@@ -83,7 +94,11 @@ func newCreateCommandVM(cfg *commonConfig) *cobra.Command {
 
 			owner := fmt.Sprintf("vm-%s", input.Name)
 			a := app.New(imageSvc, vmSvc, stateSvc, fsSvc, netSvc)
-			vm, err := a.CreateVM(cmd.Context(), input.Name, owner, spec)
+			vm, err := a.CreateVM(cmd.Context(), ports.CreateVMInput{
+				Name:  input.Name,
+				Owner: owner,
+				Spec:  spec,
+			})
 			if err != nil {
 				return fmt.Errorf("failed creating vm: %w", err)
 			}
@@ -101,6 +116,8 @@ func newCreateCommandVM(cfg *commonConfig) *cobra.Command {
 	cmd.Flags().StringVar(&input.KernelHostPath, "kernel-path", "", "The path to a kernel file on the host")
 	cmd.Flags().StringVar(&input.KernelFilename, "kernel-filename", "vmlinux", "The name of the kernel file in the image or in the hostpath")
 	cmd.Flags().StringVar(&input.BridgeName, "network-bridge", defaults.SharedBridgeName, "The name of the bridge to attach the vm to")
+	cmd.Flags().StringVar(&input.StaticIP, "static-ip", "", "A static IPV4 address (as a CIDR) to assign to the VM. If ommitted DHCP will be used")
+	cmd.Flags().StringVar(&input.StaticGatewayIP, "static-gateway-ip", "", "A gateway (as a CIDR) to use with the static IP")
 
 	cmd.MarkFlagRequired("name")
 	cmd.MarkFlagRequired("root-image")

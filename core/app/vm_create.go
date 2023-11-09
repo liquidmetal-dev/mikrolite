@@ -17,14 +17,14 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-func (a *app) CreateVM(ctx context.Context, name string, owner string, vmSpec *domain.VMSpec) (*domain.VM, error) {
+func (a *app) CreateVM(ctx context.Context, input ports.CreateVMInput) (*domain.VM, error) {
 	slog.Debug("Creating vm")
 
-	if name == "" {
+	if input.Name == "" {
 		return nil, ErrNameRequired
 	}
 
-	if vmSpec == nil {
+	if input.Spec == nil {
 		return nil, ErrVmSpecRequired
 	}
 
@@ -35,29 +35,20 @@ func (a *app) CreateVM(ctx context.Context, name string, owner string, vmSpec *d
 		return nil, fmt.Errorf("getting vm state: %w", err)
 	}
 	if vm != nil {
-		return nil, fmt.Errorf("vm %s already exists", name)
+		return nil, fmt.Errorf("vm %s already exists", input.Name)
 	}
 
 	vm = &domain.VM{
-		Name: name,
+		Name: input.Name,
 	}
-	vm.Spec = *vmSpec
+	vm.Spec = *input.Spec
 	vm.Status = &domain.VMStatus{
 		VolumeMounts: map[string]domain.Mount{},
 	}
-	vm.Status.NetworkNamespace = fmt.Sprintf("/var/run/netns/mikrolite-%s", name)
+	vm.Status.NetworkNamespace = fmt.Sprintf("/var/run/netns/mikrolite-%s", input.Name)
 	if vm.Spec.Kernel.CmdLine == nil {
 		vm.Spec.Kernel.CmdLine = defaultKernelCmdLine()
 	}
-
-	//TEST ------------------
-	// Create a bridge using virt-manager and disabled dhcp
-	gw := "192.168.100.1/24"
-	vm.Spec.NetworkConfig.StaticIPv4Address = &domain.StaticIPv4Address{
-		Address: "192.168.100.10/24",
-		Gateway: &gw,
-	}
-	// END TEST
 
 	handlers := []handler{
 		a.handleKernel,
@@ -66,7 +57,7 @@ func (a *app) CreateVM(ctx context.Context, name string, owner string, vmSpec *d
 	}
 
 	for _, h := range handlers {
-		if err := h(ctx, owner, vm); err != nil {
+		if err := h(ctx, input.Owner, vm); err != nil {
 			return nil, err
 		}
 	}
@@ -213,12 +204,12 @@ func generateNetworkConfig(vm *domain.VM) (string, error) {
 		DHCPIdentifier: firecracker.String(cloudinit.DhcpIdentifierMac),
 	}
 
-	macAddress := vm.Status.NetworkStatus.GuestMAC
-	if macAddress != "" {
-		eth.Match.MACAddress = macAddress
-	} else {
-		eth.Match.Name = vm.Status.NetworkStatus.GuestDeviceName
-	}
+	//macAddress := vm.Status.NetworkStatus.GuestMAC
+	//if macAddress != "" {
+	//		eth.Match.MACAddress = macAddress
+	//	} else {
+	eth.Match.Name = vm.Status.NetworkStatus.GuestDeviceName
+	//	}
 
 	if vm.Spec.NetworkConfig.StaticIPv4Address != nil {
 		if err := addStaticIP(vm.Spec.NetworkConfig.StaticIPv4Address, eth); err != nil {
