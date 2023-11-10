@@ -29,10 +29,15 @@ func newListCommandVM(cfg *commonConfig) *cobra.Command {
 			}
 
 			vmPrintData := [][]string{
-				{"Name", "VCPU", "MemoryInMB"},
+				{"Name", "VCPU", "Memory In MB", "IP Address"},
 			}
 			for _, vm := range vms {
-				vmPrintData = append(vmPrintData, []string{vm.Name, strconv.Itoa(vm.Spec.VCPU), strconv.Itoa(vm.Spec.MemoryInMb)})
+				ip := ""
+				if ifc, ok := vm.Spec.NetworkConfiguration.Interfaces["eth0"]; ok {
+					ip = ifc.StaticIPv4Address.Address
+				}
+
+				vmPrintData = append(vmPrintData, []string{vm.Name, strconv.Itoa(vm.Spec.VCPU), strconv.Itoa(vm.Spec.MemoryInMb), ip})
 			}
 
 			table := pterm.DefaultTable
