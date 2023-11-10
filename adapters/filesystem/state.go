@@ -20,19 +20,24 @@ const (
 
 func NewStateService(vmName string, rootStateDir string, fs afero.Fs) (ports.StateService, error) {
 	stateDir := filepath.Join(rootStateDir, vmName)
-	if err := fs.MkdirAll(stateDir, dataFilePerm); err != nil {
-		return nil, fmt.Errorf("creating state directory %s: %w", stateDir, err)
+
+	if vmName != "" {
+		if err := fs.MkdirAll(stateDir, dataFilePerm); err != nil {
+			return nil, fmt.Errorf("creating state directory %s: %w", stateDir, err)
+		}
 	}
 
 	return &stateService{
-		fs:       fs,
-		stateDir: stateDir,
+		fs:           fs,
+		stateDir:     stateDir,
+		rootStateDir: rootStateDir,
 	}, nil
 }
 
 type stateService struct {
-	fs       afero.Fs
-	stateDir string
+	fs           afero.Fs
+	stateDir     string
+	rootStateDir string
 }
 
 func (s *stateService) GetVM() (*domain.VM, error) {
@@ -59,6 +64,33 @@ func (s *stateService) SaveVM(vm *domain.VM) error {
 	}
 
 	return nil
+}
+
+func (s *stateService) ListVMs() ([]*domain.VM, error) {
+	fileInfos, err := afero.ReadDir(s.fs, s.rootStateDir)
+	if err != nil {
+		return nil, fmt.Errorf("error reading state dir %w", err)
+	}
+
+	vms := []*domain.VM{}
+	for _, fileInfo := range fileInfos {
+		if !fileInfo.IsDir() {
+			continue
+		}
+
+		s.stateDir = filepath.Join(s.stateDir, fileInfo.Name())
+
+		vm, err := s.GetVM()
+		if err != nil {
+			return nil, fmt.Errorf("error getting vm: %w", err)
+		}
+
+		vms = append(vms, vm)
+	}
+
+	s.stateDir = ""
+
+	return vms, nil
 }
 
 func (s *stateService) LogPath() string {

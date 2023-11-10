@@ -184,7 +184,7 @@ func (a *app) handleNetwork(ctx context.Context, owner string, vm *domain.VM) er
 	// 	}
 	// }
 	if !bridgeExists {
-		return errors.New("currently the network bridge must exists already. Create it using virt-manager/virsh")
+		return errors.New("currently the network bridge must exist already. Create it using virt-manager/virsh")
 	}
 
 	vm.Status.NetworkStatus = map[string]domain.NetworkStatus{}
