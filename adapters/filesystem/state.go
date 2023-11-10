@@ -85,7 +85,9 @@ func (s *stateService) ListVMs() ([]*domain.VM, error) {
 			return nil, fmt.Errorf("error getting vm: %w", err)
 		}
 
-		vms = append(vms, vm)
+		if vm != nil {
+			vms = append(vms, vm)
+		}
 	}
 
 	s.stateDir = ""

@@ -14,16 +14,18 @@ func newListCommandVM(cfg *commonConfig) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List virtual machines",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		Run: func(cmd *cobra.Command, args []string) {
 			fsSvc := afero.NewOsFs()
 			stateSvc, err := filesystem.NewStateService("", cfg.StateRootPath, fsSvc)
 			if err != nil {
-				return fmt.Errorf("creating state service: %w", err)
+				pterm.DefaultSpinner.Fail(fmt.Sprintf("❌ Error creating state service: %s\n", err))
+				return
 			}
 
 			vms, err := stateSvc.ListVMs()
 			if err != nil {
-				return fmt.Errorf("error listing vms: %w", err)
+				pterm.DefaultSpinner.Fail(fmt.Sprintf("❌ Error listing VMs: %s\n", err))
+				return
 			}
 
 			vmPrintData := [][]string{
@@ -37,8 +39,6 @@ func newListCommandVM(cfg *commonConfig) *cobra.Command {
 			table.HasHeader = true
 
 			table.WithData(vmPrintData).Render()
-
-			return nil
 		},
 	}
 

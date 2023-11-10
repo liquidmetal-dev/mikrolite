@@ -1,9 +1,11 @@
 package vm
 
 import (
+	"errors"
 	"fmt"
 
 	ctr "github.com/containerd/containerd"
+	"github.com/pterm/pterm"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
@@ -36,7 +38,10 @@ func newCreateCommandVM(cfg *commonConfig) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a virtual machine",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		Run: func(cmd *cobra.Command, args []string) {
+
+			pterm.DefaultSpinner.Start()
+			pterm.DefaultSpinner.Info(fmt.Sprintf("🚀 Creating VM: %s\n", input.Name))
 
 			spec := &domain.VMSpec{
 				VCPU:       input.VCPU,
@@ -96,13 +101,15 @@ func newCreateCommandVM(cfg *commonConfig) *cobra.Command {
 			fsSvc := afero.NewOsFs()
 			stateSvc, err := filesystem.NewStateService(input.Name, cfg.StateRootPath, fsSvc)
 			if err != nil {
-				return fmt.Errorf("creating state service: %w", err)
+				pterm.DefaultSpinner.Fail(fmt.Sprintf("❌ Error creating state service: %s\n", err))
+				return
 			}
 			diskSvc := godisk.New(fsSvc)
 			netSvc := netlink.New()
 			client, err := ctr.New(cfg.SocketPath)
 			if err != nil {
-				return fmt.Errorf("creating containerd client: %w", err)
+				pterm.DefaultSpinner.Fail(fmt.Sprintf("❌ Error creating containerd client: %s\n", err))
+				return
 			}
 			imageSvc := containerd.NewImageService(client)
 			vmSvc, err := vm.New(cfg.VMProvider, vm.VMProviderProps{
@@ -113,22 +120,30 @@ func newCreateCommandVM(cfg *commonConfig) *cobra.Command {
 				CloudHypervisorBin: cfg.CloudHypervisorBin,
 			})
 			if err != nil {
-				return fmt.Errorf("creating vm provider %s: %w", cfg.VMProvider, err)
+				pterm.DefaultSpinner.Fail(fmt.Sprintf("❌ Error creating vm provider %s: %s\n", cfg.VMProvider, err))
+				return
 			}
 
 			owner := fmt.Sprintf("vm-%s", input.Name)
 			a := app.New(imageSvc, vmSvc, stateSvc, fsSvc, netSvc)
-			vm, err := a.CreateVM(cmd.Context(), ports.CreateVMInput{
+			_, err = a.CreateVM(cmd.Context(), ports.CreateVMInput{
 				Name:  input.Name,
 				Owner: owner,
 				Spec:  spec,
 			})
 			if err != nil {
-				return fmt.Errorf("failed creating vm: %w", err)
+				switch {
+				case errors.Is(err, app.ErrVMAlreadyExists):
+					pterm.DefaultSpinner.Warning(fmt.Sprintf("VM with name %s already exists\n", input.Name))
+					return
+				default:
+					pterm.DefaultSpinner.Fail(fmt.Sprintf("❌ Error creating vm %s: %s\n", input.Name, err))
+					return
+				}
 			}
-			fmt.Println(vm)
 
-			return nil
+			pterm.DefaultSpinner.Success(fmt.Sprintf("✅ Succesfully created VM: %s\n", input.Name))
+			pterm.DefaultSpinner.Stop()
 		},
 	}
 
