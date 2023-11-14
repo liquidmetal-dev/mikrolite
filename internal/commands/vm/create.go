@@ -126,7 +126,7 @@ func newCreateCommandVM(cfg *commonConfig) *cobra.Command {
 
 			owner := fmt.Sprintf("vm-%s", input.Name)
 			a := app.New(imageSvc, vmSvc, stateSvc, fsSvc, netSvc)
-			_, err = a.CreateVM(cmd.Context(), ports.CreateVMInput{
+			vm, err := a.CreateVM(cmd.Context(), ports.CreateVMInput{
 				Name:  input.Name,
 				Owner: owner,
 				Spec:  spec,
@@ -142,7 +142,7 @@ func newCreateCommandVM(cfg *commonConfig) *cobra.Command {
 				}
 			}
 
-			pterm.DefaultSpinner.Success(fmt.Sprintf("✅ Succesfully created VM: %s\n", input.Name))
+			pterm.DefaultSpinner.Success(fmt.Sprintf("✅ Succesfully created VM: %s (%s)\n", input.Name, vm.Status.IP))
 			pterm.DefaultSpinner.Stop()
 		},
 	}

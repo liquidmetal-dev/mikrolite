@@ -47,6 +47,9 @@ type VMStatus struct {
 
 	// Metadata holds any generated metadata.
 	Metadata map[string]string `json:"metadata,omitempty"`
+
+	// TODO: refactor this
+	IP string `json:"ip,omitempty"`
 }
 
 // Kernel defines the kernel to use.
