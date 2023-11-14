@@ -1,9 +1,10 @@
 package vm
 
 import (
-	"github.com/mikrolite/mikrolite/adapters/vm/firecracker"
 	"log/slog"
 	"os"
+
+	"github.com/mikrolite/mikrolite/adapters/vm/firecracker"
 
 	"github.com/spf13/cobra"
 )
@@ -38,6 +39,7 @@ func NewVMCommand() *cobra.Command {
 
 	cmd.AddCommand(newCreateCommandVM(cfg))
 	cmd.AddCommand(newRemoveVMCommand(cfg))
+	cmd.AddCommand(newListCommandVM(cfg))
 
 	return cmd
 }

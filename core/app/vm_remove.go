@@ -3,11 +3,12 @@ package app
 import (
 	"context"
 	"fmt"
-	"log/slog"
+
+	"github.com/pterm/pterm"
 )
 
 func (a *app) RemoveVM(ctx context.Context, name string, owner string) error {
-	slog.Info("Removing vm", "name", name)
+	pterm.DefaultSpinner.Info(fmt.Sprintf("ℹ️  Removing VM: %s\n", name))
 
 	if err := a.vmService.Stop(ctx, name); err != nil {
 		return fmt.Errorf("stopping vm: %w", err)
@@ -36,6 +37,6 @@ func (a *app) RemoveVM(ctx context.Context, name string, owner string) error {
 		return fmt.Errorf("removing vm state directory %s: %w", a.stateService.Root(), err)
 	}
 
-	slog.Info("Removed vm", "name", name)
+	pterm.DefaultSpinner.Info(fmt.Sprintf("ℹ️  Removed VM: %s\n", name))
 	return nil
 }

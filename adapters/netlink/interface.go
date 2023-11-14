@@ -5,11 +5,12 @@ import (
 	"log/slog"
 	"net"
 
+	"github.com/pterm/pterm"
 	"github.com/vishvananda/netlink"
 )
 
 func (s *networkService) InterfaceCreate(name string, mac string) error {
-	slog.Info("Creating network interface", "name", name, "mac", mac)
+	pterm.DefaultSpinner.Info(fmt.Sprintf("ℹ️  Creating network interface: %s with mac %s\n", name, mac))
 
 	link := &netlink.Tuntap{
 		LinkAttrs: netlink.LinkAttrs{
@@ -43,13 +44,13 @@ func (s *networkService) InterfaceCreate(name string, mac string) error {
 }
 
 func (s *networkService) InterfaceDelete(name string) error {
-	slog.Info("Deleting network interface", "name", name)
+	pterm.DefaultSpinner.Info(fmt.Sprintf("ℹ️  Deleting network interface: %s\n", name))
 
 	return deleteLink(name, "interface")
 }
 
 func (s *networkService) InterfaceExists(name string) (bool, error) {
-	slog.Info("Checking if network interface exists", "name", name)
+	pterm.DefaultSpinner.Info(fmt.Sprintf("ℹ️  Checking if network interface exists: %s\n", name))
 
 	return linkExists(name, "interface")
 }

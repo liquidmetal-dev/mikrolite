@@ -14,6 +14,7 @@ import (
 	"github.com/mikrolite/mikrolite/core/domain"
 	"github.com/mikrolite/mikrolite/core/ports"
 	"github.com/mikrolite/mikrolite/defaults"
+	"github.com/pterm/pterm"
 	"github.com/spf13/afero"
 	"github.com/yitsushi/macpot"
 	"gopkg.in/yaml.v2"
@@ -37,7 +38,7 @@ func (a *app) CreateVM(ctx context.Context, input ports.CreateVMInput) (*domain.
 		return nil, fmt.Errorf("getting vm state: %w", err)
 	}
 	if vm != nil {
-		return nil, fmt.Errorf("vm %s already exists", input.Name)
+		return nil, ErrVMAlreadyExists
 	}
 
 	vm = &domain.VM{
@@ -108,7 +109,7 @@ func (a *app) handleKernel(ctx context.Context, owner string, vm *domain.VM) err
 }
 
 func (a *app) handleVolumes(ctx context.Context, owner string, vm *domain.VM) error {
-	slog.Info("Setting up volumes")
+	pterm.DefaultSpinner.Info("ℹ️  Setting up volumes")
 
 	slog.Debug("Setting up root volumes")
 	rootVolumeMount, err := a.handleVolume(ctx, owner, &vm.Spec.RootVolume)
@@ -171,7 +172,7 @@ func (a *app) handleMetadataService(ctx context.Context, owner string, vm *domai
 }
 
 func (a *app) handleNetwork(ctx context.Context, owner string, vm *domain.VM) error {
-	slog.Info("Setting up network")
+	pterm.DefaultSpinner.Info("ℹ️  Setting up network")
 
 	bridgeExists, err := a.networkService.BridgeExists(vm.Spec.NetworkConfiguration.BridgeName)
 	if err != nil {
@@ -184,7 +185,7 @@ func (a *app) handleNetwork(ctx context.Context, owner string, vm *domain.VM) er
 	// 	}
 	// }
 	if !bridgeExists {
-		return errors.New("currently the network bridge must exists already. Create it using virt-manager/virsh")
+		return errors.New("currently the network bridge must exist already. Create it using virt-manager/virsh")
 	}
 
 	vm.Status.NetworkStatus = map[string]domain.NetworkStatus{}

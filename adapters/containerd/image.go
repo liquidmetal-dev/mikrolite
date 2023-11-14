@@ -3,11 +3,11 @@ package containerd
 import (
 	"context"
 	"fmt"
-	"log/slog"
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/namespaces"
+	"github.com/pterm/pterm"
 
 	"github.com/mikrolite/mikrolite/core/domain"
 	"github.com/mikrolite/mikrolite/core/ports"
@@ -24,7 +24,7 @@ type imageService struct {
 }
 
 func (s *imageService) PullAndMount(ctx context.Context, input ports.PullAndMountInput) (*domain.Mount, error) {
-	slog.Info("Pulling and mounting image", "image", input.ImageName)
+	pterm.DefaultSpinner.Info(fmt.Sprintf("ℹ️  Pulling and mounting image: %s\n", input.ImageName))
 
 	leaseCtx, err := withNamespaceAndLease(ctx, input.Owner, s.client.LeasesService())
 	if err != nil {
@@ -49,7 +49,7 @@ func (s *imageService) PullAndMount(ctx context.Context, input ports.PullAndMoun
 }
 
 func (s *imageService) Cleanup(ctx context.Context, owner string) error {
-	slog.Info("Cleaning up images")
+	pterm.DefaultSpinner.Info("ℹ️  Cleaning up images")
 
 	nsCtx := namespaces.WithNamespace(ctx, Namespace)
 	leaseName := leaseNameFromOwner(owner)

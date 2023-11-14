@@ -7,6 +7,7 @@ type StateService interface {
 
 	GetVM() (*domain.VM, error)
 	SaveVM(vm *domain.VM) error
+	ListVMs() ([]*domain.VM, error)
 
 	LogPath() string
 	StdoutPath() string
