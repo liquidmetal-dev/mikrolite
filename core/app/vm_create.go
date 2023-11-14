@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/firecracker-microvm/firecracker-go-sdk"
 	"github.com/mikrolite/mikrolite/cloudinit"
@@ -64,6 +65,29 @@ func (a *app) CreateVM(ctx context.Context, input ports.CreateVMInput) (*domain.
 			return nil, err
 		}
 	}
+
+	// TEST
+
+	mac := vm.Status.NetworkStatus["eth0"].GuestMAC
+
+	ip, err := retry[string](5, 2, func() (string, error) {
+		foundIp, foundErr := a.networkService.GetIPFromMac(mac)
+		if foundErr != nil {
+			return "", foundErr
+		}
+		if foundIp == "" {
+			return "", errors.New("couldn't find ip address")
+		}
+
+		return foundIp, nil
+	})
+	if err != nil {
+		return nil, errors.New("failed to find ip address for vm")
+	}
+
+	fmt.Println(ip)
+
+	// end test
 
 	return nil, nil
 }
@@ -381,4 +405,18 @@ func getIPFromCIDR(cidr string) (string, error) {
 	slashIndex := strings.Index(cidr, "/")
 
 	return cidr[:slashIndex], nil
+}
+
+func retry[T any](attempts int, sleepInSeconds int, f func() (T, error)) (result T, err error) {
+	for i := 0; i < attempts; i++ {
+		if i > 0 {
+			time.Sleep(time.Duration(sleepInSeconds) * time.Second)
+			//sleepInSeconds *= 2
+		}
+		result, err = f()
+		if err == nil {
+			return result, nil
+		}
+	}
+	return result, fmt.Errorf("after %d attempts, last error: %s", attempts, err)
 }
