@@ -32,11 +32,7 @@ func newListCommandVM(cfg *commonConfig) *cobra.Command {
 				{"Name", "VCPU", "Memory In MB", "IP Address"},
 			}
 			for _, vm := range vms {
-				ip := ""
-				if ifc, ok := vm.Spec.NetworkConfiguration.Interfaces["eth0"]; ok {
-					ip = ifc.StaticIPv4Address.Address
-				}
-
+				ip := vm.Status.IP
 				vmPrintData = append(vmPrintData, []string{vm.Name, strconv.Itoa(vm.Spec.VCPU), strconv.Itoa(vm.Spec.MemoryInMb), ip})
 			}
 
