@@ -3,7 +3,6 @@ package firecracker
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -14,7 +13,6 @@ import (
 	"github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 	"github.com/mikrolite/mikrolite/core/domain"
 	"github.com/mikrolite/mikrolite/defaults"
-	"github.com/sanity-io/litter"
 )
 
 // Create will create a new vm.
@@ -159,14 +157,14 @@ func (f *Provider) Create(ctx context.Context, vm *domain.VM) (string, error) {
 	}
 
 	//START ----- for debugging debug
-	slog.Debug("FC instance info")
-	info, err := m.DescribeInstanceInfo(ctx)
-	if err != nil {
-		return "", fmt.Errorf("getting instance info: %w", err)
-	}
-	litter.Dump(info)
-	slog.Debug("FC machine cfg")
-	litter.Dump(m.Cfg)
+	// slog.Debug("FC instance info")
+	// info, err := m.DescribeInstanceInfo(ctx)
+	// if err != nil {
+	// 	return "", fmt.Errorf("getting instance info: %w", err)
+	// }
+	// litter.Dump(info)
+	// slog.Debug("FC machine cfg")
+	// litter.Dump(m.Cfg)
 
 	// meta := &metadata{}
 	// if err := m.GetMetadata(ctx, meta); err != nil {

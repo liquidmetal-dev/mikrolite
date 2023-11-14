@@ -58,6 +58,8 @@ func (a *app) CreateVM(ctx context.Context, input ports.CreateVMInput) (*domain.
 		a.handleNetwork,
 		a.handleMetadata,
 		a.handleVMCreateAndStart,
+		a.handleFindIP,
+		a.handleSaveVM,
 	}
 
 	for _, h := range handlers {
@@ -66,11 +68,25 @@ func (a *app) CreateVM(ctx context.Context, input ports.CreateVMInput) (*domain.
 		}
 	}
 
-	// TEST
+	return vm, nil
+}
 
+func (a *app) handleVMCreateAndStart(ctx context.Context, owner string, vm *domain.VM) error {
+	_, err := a.vmService.Create(ctx, vm)
+	if err != nil {
+		return fmt.Errorf("creating vm: %w", err)
+	}
+
+	//TODO: add start if the provider supports start
+
+	return nil
+}
+
+func (a *app) handleFindIP(ctx context.Context, owner string, vm *domain.VM) error {
 	mac := vm.Status.NetworkStatus["eth0"].GuestMAC
 
-	ip, err := retry[string](5, 2, func() (string, error) {
+	sleep := 500 * time.Millisecond
+	ip, err := retry[string](40, sleep, func() (string, error) {
 		foundIp, foundErr := a.networkService.GetIPFromMac(mac)
 		if foundErr != nil {
 			return "", foundErr
@@ -82,23 +98,10 @@ func (a *app) CreateVM(ctx context.Context, input ports.CreateVMInput) (*domain.
 		return foundIp, nil
 	})
 	if err != nil {
-		return nil, errors.New("failed to find ip address for vm")
+		return errors.New("failed to find ip address for vm")
 	}
 
-	fmt.Println(ip)
-
-	// end test
-
-	return nil, nil
-}
-
-func (a *app) handleVMCreateAndStart(ctx context.Context, owner string, vm *domain.VM) error {
-	_, err := a.vmService.Create(ctx, vm)
-	if err != nil {
-		return fmt.Errorf("creating vm: %w", err)
-	}
-
-	//TODO: add start if the provider supports start
+	vm.Status.IP = ip
 
 	return nil
 }
@@ -279,6 +282,10 @@ func (a *app) handleMetadata(ctx context.Context, owner string, vm *domain.VM) e
 
 }
 
+func (a *app) handleSaveVM(ctx context.Context, owner string, vm *domain.VM) error {
+	return a.stateService.SaveVM(vm)
+}
+
 func (a *app) createMetadata(vm *domain.VM) (string, error) {
 	metadata := map[string]string{}
 	metadata["instance_id"] = vm.Name
@@ -407,10 +414,11 @@ func getIPFromCIDR(cidr string) (string, error) {
 	return cidr[:slashIndex], nil
 }
 
-func retry[T any](attempts int, sleepInSeconds int, f func() (T, error)) (result T, err error) {
+// TODO: change this to timeout instead of number of reties
+func retry[T any](attempts int, sleep time.Duration, f func() (T, error)) (result T, err error) {
 	for i := 0; i < attempts; i++ {
 		if i > 0 {
-			time.Sleep(time.Duration(sleepInSeconds) * time.Second)
+			time.Sleep(sleep)
 			//sleepInSeconds *= 2
 		}
 		result, err = f()
