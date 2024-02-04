@@ -51,6 +51,13 @@ func (a *app) CreateVM(ctx context.Context, input ports.CreateVMInput) (*domain.
 	}
 	vm.Status.NetworkNamespace = fmt.Sprintf("/var/run/netns/mikrolite-%s", input.Name)
 
+	handlerInput := &handlerInput{
+		SnapshotterVolume: input.SnapshotterVolume,
+		SnapshotterKernel: input.SnapshotterKernal,
+		Owner:             input.Owner,
+		VM:                vm,
+	}
+
 	handlers := []handler{
 		a.handleMetadataService,
 		a.handleKernel,
@@ -63,7 +70,7 @@ func (a *app) CreateVM(ctx context.Context, input ports.CreateVMInput) (*domain.
 	}
 
 	for _, h := range handlers {
-		if err := h(ctx, input.Owner, vm); err != nil {
+		if err := h(ctx, handlerInput); err != nil {
 			return nil, err
 		}
 	}
@@ -71,8 +78,8 @@ func (a *app) CreateVM(ctx context.Context, input ports.CreateVMInput) (*domain.
 	return vm, nil
 }
 
-func (a *app) handleVMCreateAndStart(ctx context.Context, owner string, vm *domain.VM) error {
-	_, err := a.vmService.Create(ctx, vm)
+func (a *app) handleVMCreateAndStart(ctx context.Context, input *handlerInput) error {
+	_, err := a.vmService.Create(ctx, input.VM)
 	if err != nil {
 		return fmt.Errorf("creating vm: %w", err)
 	}
@@ -82,8 +89,8 @@ func (a *app) handleVMCreateAndStart(ctx context.Context, owner string, vm *doma
 	return nil
 }
 
-func (a *app) handleFindIP(ctx context.Context, owner string, vm *domain.VM) error {
-	mac := vm.Status.NetworkStatus["eth0"].GuestMAC
+func (a *app) handleFindIP(ctx context.Context, input *handlerInput) error {
+	mac := input.VM.Status.NetworkStatus["eth0"].GuestMAC
 
 	sleep := 500 * time.Millisecond
 	ip, err := retry[string](40, sleep, func() (string, error) {
@@ -101,15 +108,15 @@ func (a *app) handleFindIP(ctx context.Context, owner string, vm *domain.VM) err
 		return errors.New("failed to find ip address for vm")
 	}
 
-	vm.Status.IP = ip
+	input.VM.Status.IP = ip
 
 	return nil
 }
 
-func (a *app) handleKernel(ctx context.Context, owner string, vm *domain.VM) error {
-	kernel := vm.Spec.Kernel
+func (a *app) handleKernel(ctx context.Context, input *handlerInput) error {
+	kernel := input.VM.Spec.Kernel
 	if kernel.Source.HostPath != nil {
-		vm.Status.KernelMount = &domain.Mount{
+		input.VM.Status.KernelMount = &domain.Mount{
 			Type:     domain.MountTypeFilesystemPath,
 			Location: kernel.Source.HostPath.Path,
 		}
@@ -119,15 +126,16 @@ func (a *app) handleKernel(ctx context.Context, owner string, vm *domain.VM) err
 
 	if kernel.Source.Container != nil {
 		mount, err := a.imageService.PullAndMount(ctx, ports.PullAndMountInput{
-			ImageName: kernel.Source.Container.Image,
-			Owner:     owner,
-			UsedFor:   ports.ImageUsedForKernel,
+			ImageName:   kernel.Source.Container.Image,
+			Owner:       input.Owner,
+			Snapshotter: input.SnapshotterKernel,
+			ImageId:     "kernel",
 		})
 		if err != nil {
 			return fmt.Errorf("getting kernel image: %w", err)
 		}
 
-		vm.Status.KernelMount = mount
+		input.VM.Status.KernelMount = mount
 
 		return nil
 	}
@@ -135,29 +143,30 @@ func (a *app) handleKernel(ctx context.Context, owner string, vm *domain.VM) err
 	return errors.New("unexpected")
 }
 
-func (a *app) handleVolumes(ctx context.Context, owner string, vm *domain.VM) error {
+func (a *app) handleVolumes(ctx context.Context, input *handlerInput) error {
 	pterm.DefaultSpinner.Info("ℹ️  Setting up volumes")
 
 	slog.Debug("Setting up root volumes")
-	rootVolumeMount, err := a.handleVolume(ctx, owner, &vm.Spec.RootVolume)
+	rootVolumeMount, err := a.handleVolume(ctx, input.Owner, input.SnapshotterVolume, "root", &input.VM.Spec.RootVolume)
 	if err != nil {
 		return fmt.Errorf("handling root volume: %w", err)
 	}
-	vm.Status.VolumeMounts[vm.Spec.RootVolume.Name] = *rootVolumeMount
+	input.VM.Status.VolumeMounts[input.VM.Spec.RootVolume.Name] = *rootVolumeMount
 
 	slog.Debug("Setting up additional volumes")
-	for _, vol := range vm.Spec.AdditionalVolumes {
-		volMount, err := a.handleVolume(ctx, owner, &vol)
+	for i, vol := range input.VM.Spec.AdditionalVolumes {
+		volumeId := fmt.Sprintf("vol%d", i)
+		volMount, err := a.handleVolume(ctx, input.Owner, input.SnapshotterVolume, volumeId, &vol)
 		if err != nil {
 			return fmt.Errorf("handling volume %s: %s", vol.Name, err)
 		}
-		vm.Status.VolumeMounts[vol.Name] = *volMount
+		input.VM.Status.VolumeMounts[vol.Name] = *volMount
 	}
 
 	return nil
 }
 
-func (a *app) handleVolume(ctx context.Context, owner string, volume *domain.Volume) (*domain.Mount, error) {
+func (a *app) handleVolume(ctx context.Context, owner string, snapshotter string, volumeId string, volume *domain.Volume) (*domain.Mount, error) {
 	if volume.Source.Raw != nil {
 		return &domain.Mount{
 			Type:     domain.MountTypeFilesystemPath,
@@ -167,16 +176,17 @@ func (a *app) handleVolume(ctx context.Context, owner string, volume *domain.Vol
 
 	if volume.Source.Container != nil {
 		return a.imageService.PullAndMount(ctx, ports.PullAndMountInput{
-			ImageName: volume.Source.Container.Image,
-			Owner:     owner,
-			UsedFor:   ports.ImageUsedForVolume,
+			ImageName:   volume.Source.Container.Image,
+			Owner:       owner,
+			Snapshotter: snapshotter,
+			ImageId:     volumeId,
 		})
 	}
 
 	return nil, errors.New("unexpected")
 }
 
-func (a *app) handleMetadataService(ctx context.Context, owner string, vm *domain.VM) error {
+func (a *app) handleMetadataService(ctx context.Context, input *handlerInput) error {
 	if !a.vmService.HasMetadataService() {
 		slog.Debug("vm provider doesn't have metadata service")
 
@@ -193,15 +203,15 @@ func (a *app) handleMetadataService(ctx context.Context, owner string, vm *domai
 		},
 	}
 
-	vm.Spec.NetworkConfiguration.Interfaces["eth1"] = *metadataInt
+	input.VM.Spec.NetworkConfiguration.Interfaces["eth1"] = *metadataInt
 
 	return nil
 }
 
-func (a *app) handleNetwork(ctx context.Context, owner string, vm *domain.VM) error {
+func (a *app) handleNetwork(ctx context.Context, input *handlerInput) error {
 	pterm.DefaultSpinner.Info("ℹ️  Setting up network")
 
-	bridgeExists, err := a.networkService.BridgeExists(vm.Spec.NetworkConfiguration.BridgeName)
+	bridgeExists, err := a.networkService.BridgeExists(input.VM.Spec.NetworkConfiguration.BridgeName)
 	if err != nil {
 		return fmt.Errorf("checking if bridge exists")
 	}
@@ -215,8 +225,8 @@ func (a *app) handleNetwork(ctx context.Context, owner string, vm *domain.VM) er
 		return errors.New("currently the network bridge must exist already. Create it using virt-manager/virsh")
 	}
 
-	vm.Status.NetworkStatus = map[string]domain.NetworkStatus{}
-	for name, intCfg := range vm.Spec.NetworkConfiguration.Interfaces {
+	input.VM.Status.NetworkStatus = map[string]domain.NetworkStatus{}
+	for name, intCfg := range input.VM.Spec.NetworkConfiguration.Interfaces {
 		slog.Debug("handling network interface", "name", name)
 
 		mac, err := macpot.New(macpot.AsLocal(), macpot.AsUnicast())
@@ -239,12 +249,12 @@ func (a *app) handleNetwork(ctx context.Context, owner string, vm *domain.VM) er
 		}
 
 		if intCfg.AttachToBridge {
-			if attachErr := a.networkService.AttachToBridge(ifaceName, vm.Spec.NetworkConfiguration.BridgeName); attachErr != nil {
+			if attachErr := a.networkService.AttachToBridge(ifaceName, input.VM.Spec.NetworkConfiguration.BridgeName); attachErr != nil {
 				return fmt.Errorf("attching vm interface to bridge: %w", attachErr)
 			}
 		}
 
-		vm.Status.NetworkStatus[name] = domain.NetworkStatus{
+		input.VM.Status.NetworkStatus[name] = domain.NetworkStatus{
 			HostDeviveName: ifaceName,
 			GuestMAC:       mac.ToString(),
 		}
@@ -253,37 +263,37 @@ func (a *app) handleNetwork(ctx context.Context, owner string, vm *domain.VM) er
 	return nil
 }
 
-func (a *app) handleMetadata(ctx context.Context, owner string, vm *domain.VM) error {
-	networkConfig, err := generateNetworkConfig(vm)
+func (a *app) handleMetadata(ctx context.Context, input *handlerInput) error {
+	networkConfig, err := generateNetworkConfig(input.VM)
 	if err != nil {
 		return fmt.Errorf("generating network config")
 	}
-	vm.Status.Metadata = map[string]string{
+	input.VM.Status.Metadata = map[string]string{
 		cloudinit.NetworkConfigDataKey: networkConfig,
 	}
 
-	metadata, err := a.createMetadata(vm)
+	metadata, err := a.createMetadata(input.VM)
 	if err != nil {
 		return fmt.Errorf("generating metada data: %w", err)
 	}
-	vm.Status.Metadata[cloudinit.InstanceDataKey] = metadata
+	input.VM.Status.Metadata[cloudinit.InstanceDataKey] = metadata
 
-	if vm.Spec.Bootstrap != nil {
+	if input.VM.Spec.Bootstrap != nil {
 
-		userdata, err := a.createUserData(vm)
+		userdata, err := a.createUserData(input.VM)
 		if err != nil {
 			return fmt.Errorf("generating user data: %w", err)
 		}
 
-		vm.Status.Metadata[cloudinit.UserdataKey] = userdata
+		input.VM.Status.Metadata[cloudinit.UserdataKey] = userdata
 	}
 
 	return nil
 
 }
 
-func (a *app) handleSaveVM(ctx context.Context, owner string, vm *domain.VM) error {
-	return a.stateService.SaveVM(vm)
+func (a *app) handleSaveVM(ctx context.Context, input *handlerInput) error {
+	return a.stateService.SaveVM(input.VM)
 }
 
 func (a *app) createMetadata(vm *domain.VM) (string, error) {

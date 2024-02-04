@@ -7,17 +7,11 @@ import (
 )
 
 type PullAndMountInput struct {
-	ImageName string
-	Owner     string
-	UsedFor   ImageUserFor
+	ImageId     string
+	ImageName   string
+	Owner       string
+	Snapshotter string
 }
-
-type ImageUserFor string
-
-const (
-	ImageUsedForVolume ImageUserFor = "volume"
-	ImageUsedForKernel ImageUserFor = "kernel"
-)
 
 // Image service is the definition of a driven port for interacting with container images.
 type ImageService interface {

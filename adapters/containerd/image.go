@@ -36,11 +36,11 @@ func (s *imageService) PullAndMount(ctx context.Context, input ports.PullAndMoun
 		return nil, fmt.Errorf("pulling image %s: %w", input.ImageName, err)
 	}
 
-	if err := ensureUnpacked(leaseCtx, image, input.UsedFor); err != nil {
+	if err := ensureUnpacked(leaseCtx, image, input.Snapshotter); err != nil {
 		return nil, fmt.Errorf("ensuring image is unpacked: %w", err)
 	}
 
-	mount, err := s.snapshotImage(leaseCtx, input.Owner, image, input.UsedFor)
+	mount, err := s.snapshotImage(leaseCtx, input.Owner, image, input.Snapshotter, input.ImageId)
 	if err != nil {
 		return nil, fmt.Errorf("snapshotting image %s: %w", image.Name(), err)
 	}

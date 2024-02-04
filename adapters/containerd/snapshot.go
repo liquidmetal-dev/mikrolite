@@ -11,12 +11,9 @@ import (
 	"github.com/opencontainers/image-spec/identity"
 
 	"github.com/mikrolite/mikrolite/core/domain"
-	"github.com/mikrolite/mikrolite/core/ports"
 )
 
-func (s *imageService) snapshotImage(ctx context.Context, owner string, image containerd.Image, usage ports.ImageUserFor) (*domain.Mount, error) {
-	snapshotter := getSnapshotterByUse(usage)
-
+func (s *imageService) snapshotImage(ctx context.Context, owner string, image containerd.Image, snapshotter string, imageId string) (*domain.Mount, error) {
 	content, err := image.RootFS(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("getting root filesystem for image %s: %w", image.Name(), err)
@@ -24,7 +21,7 @@ func (s *imageService) snapshotImage(ctx context.Context, owner string, image co
 
 	parent := identity.ChainID(content).String()
 
-	snapshotKey := fmt.Sprintf("mikrolite/%s/%s", owner, usage)
+	snapshotKey := fmt.Sprintf("mikrolite/%s/%s", owner, imageId)
 	snapshotClient := s.client.SnapshotService(snapshotter)
 
 	exists, err := snapshotExists(ctx, snapshotKey, snapshotClient)
@@ -77,9 +74,7 @@ func snapshotExists(ctx context.Context, key string, snapshotter snapshots.Snaps
 	return exists, nil
 }
 
-func ensureUnpacked(ctx context.Context, image containerd.Image, usage ports.ImageUserFor) error {
-	snapshotter := getSnapshotterByUse(usage)
-
+func ensureUnpacked(ctx context.Context, image containerd.Image, snapshotter string) error {
 	isUnpacked, err := image.IsUnpacked(ctx, snapshotter)
 	if err != nil {
 		return fmt.Errorf("checking if image %s is unpacked with snapshotter %s: %w", image.Name(), snapshotter, err)
@@ -97,12 +92,4 @@ func ensureUnpacked(ctx context.Context, image containerd.Image, usage ports.Ima
 	}
 
 	return nil
-}
-
-func getSnapshotterByUse(use ports.ImageUserFor) string {
-	if use == ports.ImageUsedForKernel {
-		return SnapshotterKernel
-	}
-
-	return SnapshotterVolume
 }

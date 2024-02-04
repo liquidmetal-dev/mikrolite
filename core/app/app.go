@@ -31,4 +31,11 @@ type app struct {
 	networkService ports.NetworkService
 }
 
-type handler func(ctx context.Context, owner string, vm *domain.VM) error
+type handlerInput struct {
+	Owner             string
+	SnapshotterKernel string
+	SnapshotterVolume string
+	VM                *domain.VM
+}
+
+type handler func(ctx context.Context, input *handlerInput) error

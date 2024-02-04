@@ -7,9 +7,11 @@ import (
 )
 
 type CreateVMInput struct {
-	Name  string
-	Owner string
-	Spec  *domain.VMSpec
+	Name              string
+	Owner             string
+	Spec              *domain.VMSpec
+	SnapshotterVolume string
+	SnapshotterKernal string
 }
 
 // VMUseCases defines the uses cases related to interacting with vms

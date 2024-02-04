@@ -33,6 +33,8 @@ func newCreateCommandVM(cfg *commonConfig) *cobra.Command {
 		StaticIP          string
 		StaticGatewayIP   string
 		SSHKeyFile        string
+		SnapshotterVolume string
+		SnapshotterKernel string
 	}{}
 
 	cmd := &cobra.Command{
@@ -127,9 +129,11 @@ func newCreateCommandVM(cfg *commonConfig) *cobra.Command {
 			owner := fmt.Sprintf("vm-%s", input.Name)
 			a := app.New(imageSvc, vmSvc, stateSvc, fsSvc, netSvc)
 			vm, err := a.CreateVM(cmd.Context(), ports.CreateVMInput{
-				Name:  input.Name,
-				Owner: owner,
-				Spec:  spec,
+				Name:              input.Name,
+				Owner:             owner,
+				Spec:              spec,
+				SnapshotterKernal: input.SnapshotterKernel,
+				SnapshotterVolume: input.SnapshotterVolume,
 			})
 			if err != nil {
 				switch {
@@ -158,6 +162,8 @@ func newCreateCommandVM(cfg *commonConfig) *cobra.Command {
 	cmd.Flags().StringVar(&input.StaticIP, "static-ip", "", "A static IPV4 address (as a CIDR) to assign to the VM. If ommitted DHCP will be used")
 	cmd.Flags().StringVar(&input.StaticGatewayIP, "static-gateway-ip", "", "A gateway (as a CIDR) to use with the static IP")
 	cmd.Flags().StringVar(&input.SSHKeyFile, "ssh-key", "", "A SSH public key to use as an authorized key")
+	cmd.Flags().StringVar(&input.SnapshotterVolume, "snapshotter-volume", "devmapper", "The containerd snapshotter to use for volumes")
+	cmd.Flags().StringVar(&input.SnapshotterKernel, "snapshotter-kernel", "native", "The containerd snapshotter to use for the kernel")
 
 	cmd.MarkFlagRequired("name")
 	cmd.MarkFlagRequired("root-image")
